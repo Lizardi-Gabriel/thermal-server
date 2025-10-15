@@ -18,7 +18,8 @@ DB_NAME = os.getenv("DB_NAME")
 engine = create_engine(
     f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
     echo=True,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    connect_args={"ssl_disabled": True}
 )
 
 # crear la sesion
