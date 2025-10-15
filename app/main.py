@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from app.routers import router
+from app.routers import router as api_router
+from app.gallery import router as gallery_router
 
 # Crear la instancia de la aplicación FastAPI
 app = FastAPI(
@@ -9,7 +10,8 @@ app = FastAPI(
 )
 
 # Registrar los routers
-app.include_router(router)
+app.include_router(api_router)
+app.include_router(gallery_router)
 
 # Punto de entrada para ejecutar la aplicación
 if __name__ == "__main__":
