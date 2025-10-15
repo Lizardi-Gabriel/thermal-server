@@ -1,0 +1,17 @@
+from fastapi import FastAPI
+from app.routers import router
+
+# Crear la instancia de la aplicación FastAPI
+app = FastAPI(
+    title="Thermal Monitoring API",
+    description="API para monitorear calidad del aire y gestionar usuarios e imágenes",
+    version="1.0.0"
+)
+
+# Registrar los routers
+app.include_router(router)
+
+# Punto de entrada para ejecutar la aplicación
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
