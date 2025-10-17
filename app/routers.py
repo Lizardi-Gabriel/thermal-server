@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -349,33 +351,47 @@ def obtener_registro_calidad_aire(record_id: int, db: Session = Depends(get_db))
 # ENDPOINTS statusIsla
 # ============================================================================
 
-
-@router.post("/statusIsla", status_code=status.HTTP_200_OK)
+@router.post("/statusIsla", status_code=status.HTTP_201_CREATED)
 def recibir_status_isla(payload: schemas.StatusPayload):
-    print(f"Status recibido: {payload.status} a las {payload.timestamp}")
+    """Recibe un status y lo anade al historial en un archivo JSON."""
+    file_path = "status_isla.json"
+    new_entry = {"status": payload.status, "timestamp": payload.timestamp}
 
-    # Guardar el status al final de  archivo de texto
-    with open("status_isla.txt", "w") as f:
-        f.write(f"status: {payload.status}, timestamp: {payload.timestamp}\n")
-
-    return {"detail": f"Status '{payload.status}' recibido correctamente."}
-
-
-# ver el status de la isla
-@router.get("/statusIsla", response_model=schemas.StatusPayload)
-def obtener_status_isla():
     try:
-        with open("status_isla.txt", "r") as f:
-            lines = f.readlines()
-            status_line = lines[0].strip()
-            timestamp_line = lines[1].strip()
+        with open(file_path, "r") as f:
+            history = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        history = []
 
-            status_value = status_line.split(": ")[1]
-            timestamp_value = timestamp_line.split(": ")[1]
+    history.append(new_entry)
 
-            return schemas.StatusPayload(status=status_value, timestamp=timestamp_value)
+    with open(file_path, "w") as f:
+        json.dump(history, f, indent=4)
+
+    return {"detail": f"Status '{payload.status}' anadido al historial."}
+
+
+# ver el historial de status de la isla
+@router.get("/statusIsla", response_model=List[schemas.StatusPayload])
+def obtener_historial_status_isla():
+    file_path = "status_isla.json"
+
+    try:
+        with open(file_path, "r") as f:
+            history = json.load(f)
+            if not history:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="El historial de status esta vacio."
+                )
+            return history
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No se ha recibido ningun status aun."
+        )
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al leer el archivo de historial. Formato invalido."
         )
