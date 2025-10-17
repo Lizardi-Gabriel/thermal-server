@@ -343,3 +343,39 @@ def obtener_registro_calidad_aire(record_id: int, db: Session = Depends(get_db))
             detail="Registro no encontrado"
         )
     return record
+
+
+# ============================================================================
+# ENDPOINTS statusIsla
+# ============================================================================
+
+
+@router.post("/statusIsla", status_code=status.HTTP_200_OK)
+def recibir_status_isla(payload: schemas.StatusPayload):
+    print(f"Status recibido: {payload.status} a las {payload.timestamp}")
+
+    # Guardar el status al final de  archivo de texto
+    with open("status_isla.txt", "w") as f:
+        f.write(f"status: {payload.status}, timestamp: {payload.timestamp}\n")
+
+    return {"detail": f"Status '{payload.status}' recibido correctamente."}
+
+
+# ver el status de la isla
+@router.get("/statusIsla", response_model=schemas.StatusPayload)
+def obtener_status_isla():
+    try:
+        with open("status_isla.txt", "r") as f:
+            lines = f.readlines()
+            status_line = lines[0].strip()
+            timestamp_line = lines[1].strip()
+
+            status_value = status_line.split(": ")[1]
+            timestamp_value = timestamp_line.split(": ")[1]
+
+            return schemas.StatusPayload(status=status_value, timestamp=timestamp_value)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se ha recibido ningun status aun."
+        )

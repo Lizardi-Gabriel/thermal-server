@@ -157,3 +157,10 @@ class HealthCheckResponse(BaseModel):
     status: str = Field(..., description="Estado del servicio")
     message: str = Field(..., description="Mensaje descriptivo")
     timestamp: datetime = Field(default_factory=datetime.now, description="Fecha y hora de la verificacion")
+
+
+# statusIsla
+class StatusPayload(BaseModel):
+    """Define el cuerpo esperado para la peticion de status"""
+    status: str
+    timestamp: str
