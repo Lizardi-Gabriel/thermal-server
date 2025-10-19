@@ -7,3 +7,5 @@ python-jose[cryptography]
 passlib[bcrypt]
 mysql-connector-python
 pydantic[email]
+python-multipart
+bcrypt==4.0.1

@@ -1,397 +1,112 @@
-import json
-
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
-from app import crud, schemas
+from datetime import timedelta
+from app import crud, schemas, models, security
 from app.database import get_db
-from sqlalchemy import text
+from datetime import date
 
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(security.get_current_user)]
+)
 
 
-# ============================================================================
-# HEALTH CHECK Y DIAGNOSTICO
-# ============================================================================
-@router.get("/", response_model=schemas.HealthCheckResponse)
-def health_check():
-    """Verificar estado del servicio"""
-    return {
-        "status": "ok",
-        "message": "API funcionando correctamente"
-    }
-
-
-@router.get("/db-test", response_model=schemas.MessageResponse)
-def test_database_connection(db: Session = Depends(get_db)):
-    """Probar conexion a base de datos"""
-    try:
-        db.execute(text('SELECT 1'))
-        return {
-            "status": "success",
-            "message": "Conexion a base de datos exitosa"
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error de conexion: {str(e)}"
-        )
-
-
-# ============================================================================
 # ENDPOINTS DE USUARIOS
-# ============================================================================
-
-@router.post("/users", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def crear_usuario(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    """Crear nuevo usuario en el sistema"""
-    # Verificar si username ya existe
-    db_user = crud.get_user_by_username(db, username=user.username)
-    if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El nombre de usuario ya existe"
-        )
-
-    # Verificar si email ya existe
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El correo electronico ya esta registrado"
-        )
-
-    return crud.create_user(db=db, user=user)
 
 
-@router.get("/users/{user_id}", response_model=schemas.UserResponse)
-def obtener_usuario(user_id: int, db: Session = Depends(get_db)):
-    """Obtener informacion de un usuario especifico"""
-    db_user = crud.get_user_by_id(db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
-    return db_user
+@router.get("/usuarios/me", response_model=schemas.Usuario)
+def read_users_me(current_user: models.Usuario = Depends(security.get_current_user)):
+    """ Devuelve la información del usuario actualmente autenticado. """
+    return current_user
 
 
-@router.get("/users", response_model=List[schemas.UserResponse])
-def listar_usuarios(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar todos los usuarios con paginacion"""
-    return crud.get_users(db=db, skip=skip, limit=limit)
+# ENDPOINTS DE EVENTOS
+
+@router.get("/eventos", response_model=List[schemas.Evento])
+def listar_eventos(skip: int = 0, limit: int = 25, db: Session = Depends(get_db)):
+    """ Obtiene una lista de eventos con detalles completos. especificar limit. Requiere autenticación. """
+    return crud.get_eventos(db=db, skip=skip, limit=limit)
 
 
-# ============================================================================
-# ENDPOINT PRINCIPAL: GUARDAR IMAGEN CON DETECCIONES
-# ============================================================================
+@router.get("/eventos/fecha/{fecha_evento}", response_model=List[schemas.Evento])
+def listar_eventos_por_fecha(fecha_evento: date, db: Session = Depends(get_db)):
+    """ Obtiene una lista de todos los eventos con detalles completos para una fecha específica. La fecha debe estar en formato AAAA-MM-DD."""
+    eventos = crud.get_eventos_por_fecha(db=db, fecha_evento=fecha_evento)
+    return eventos
 
-@router.post("/images/with-detections", response_model=schemas.ImageWithDetections, status_code=status.HTTP_201_CREATED)
-def guardar_imagen_con_detecciones(
-        image_path: str,
-        detections: List[schemas.DetectionBase],
-        db: Session = Depends(get_db)
-):
+
+@router.get("/eventos/{evento_id}", response_model=schemas.Evento)
+def obtener_evento(evento_id: int, db: Session = Depends(get_db)):
+    """ Obtiene los detalles completos de un evento, incluyendo imágenes y mediciones. """
+    db_evento = crud.get_evento_by_id(db, evento_id=evento_id)
+    if db_evento is None:
+        raise HTTPException(status_code=404, detail="Evento no encontrado.")
+    return db_evento
+
+
+@router.put("/eventos/{evento_id}/status", response_model=schemas.Evento)
+def actualizar_estatus_evento(evento_id: int, estatus: models.EstatusEventoEnum, db: Session = Depends(get_db), current_user: models.Usuario = Depends(security.get_current_user)):
+    """ Confirma o descarta un evento, asignando al usuario actual como el que realizó la acción. """
+    update_data = schemas.EventoUpdate(estatus=estatus, usuario_id=current_user.usuario_id)
+    db_evento = crud.update_evento(db, evento_id=evento_id, evento_update=update_data)
+    if db_evento is None:
+        raise HTTPException(status_code=404, detail="Evento no encontrado.")
+    return db_evento
+
+
+@router.patch("/eventos/{evento_id}/descripcion", response_model=schemas.Evento)
+def actualizar_descripcion_evento(evento_id: int, data: schemas.EventoUpateDescripcion, db: Session = Depends(get_db)):
+    """ Actualiza únicamente la descripción de un evento (por ejemplo, con análisis de un LLM). """
+    db_evento = crud.update_evento_descripcion(db, evento_id, evento_update=data)
+    if db_evento is None:
+        raise HTTPException(status_code=404, detail="Evento no encontrado.")
+    return db_evento
+
+
+# ENDPOINT COMBINADO para Imagen y Detecciones
+
+@router.post("/eventos/{evento_id}/imagenes", response_model=schemas.Imagen, status_code=status.HTTP_201_CREATED)
+def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecciones, db: Session = Depends(get_db)):
     """
-    Body:
-    {
-        "image_path": "https://storage.azure.com/container/imagen_20251014_123456.jpg",
-        "detections": [
-            {
-                "confianza": 0.85,
-                "x1": 100,
-                "y1": 200,
-                "x2": 300,
-                "y2": 400
-            },
-            {
-                "confianza": 0.92,
-                "x1": 500,
-                "y1": 150,
-                "x2": 650,
-                "y2": 350
-            }
-        ]
-    }
+    Añade una nueva imagen a un evento, junto con todas sus detecciones.
     """
-    # Crear registro de imagen
-    image_create = schemas.ImageCreate(image_path=image_path)
-    db_image = crud.create_image(db=db, image=image_create)
+    # Verificamos que el evento exista primero
+    if not crud.get_evento_by_id(db, evento_id):
+        raise HTTPException(status_code=404, detail="Evento no encontrado.")
 
-    # Guardar todas las detecciones
-    created_detections = []
-    for detection_data in detections:
-        detection_create = schemas.DetectionCreate(
-            image_id=db_image.image_id,
-            confianza=detection_data.confianza,
-            x1=detection_data.x1,
-            y1=detection_data.y1,
-            x2=detection_data.x2,
-            y2=detection_data.y2
-        )
-        db_detection = crud.create_detection(db=db, detection=detection_create)
-        created_detections.append(db_detection)
-
-    # Refrescar imagen para obtener numero actualizado de detecciones
-    db.refresh(db_image)
-
-    return {
-        **db_image.__dict__,
-        "detections": created_detections
-    }
+    return crud.create_imagen_con_detecciones(db, evento_id=evento_id, imagen=data.imagen, detecciones=data.detecciones)
 
 
-# ============================================================================
-# ENDPOINTS DE IMAGENES
-# ============================================================================
+# ENDPOINTS DE CalidadAire
 
-@router.get("/images/{image_id}", response_model=schemas.ImageComplete)
-def obtener_imagen(image_id: int, db: Session = Depends(get_db)):
-    """Obtener imagen con todas sus detecciones y confirmaciones"""
-    db_image = crud.get_image_by_id(db, image_id=image_id)
-    if db_image is None:
+@router.post("/eventos/{evento_id}/calidad-aire", response_model=schemas.CalidadAire, status_code=status.HTTP_201_CREATED)
+def agregar_medicion_calidad_aire(evento_id: int, medicion: schemas.CalidadAireBase, db: Session = Depends(get_db)):
+    """ Añade un nuevo registro de calidad del aire a un evento específico. """
+    if not crud.get_evento_by_id(db, evento_id):
+        raise HTTPException(status_code=404, detail="Evento no encontrado.")
+
+    # Creamos el objeto completo para la función crud
+    medicion_data = schemas.CalidadAireCreate(evento_id=evento_id, **medicion.model_dump())
+    return crud.create_calidad_aire(db, registro=medicion_data)
+
+
+# ... (resto de tus importaciones y código de router.py)
+
+@router.patch("/calidad-aire/{registro_id}/tipo", response_model=schemas.CalidadAire)
+def actualizar_tipo_de_medicion( registro_id: int, nuevo_tipo: schemas.TipoMedicionEnum, db: Session = Depends(get_db)):
+    """ Actualiza el tipo de una medición de calidad del aire específica ('antes', 'durante', 'despues'). """
+    db_registro = crud.update_calidad_aire_tipo(
+        db=db,
+        registro_id=registro_id,
+        nuevo_tipo=nuevo_tipo
+    )
+
+    if db_registro is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Imagen no encontrada"
+            detail="Registro de calidad del aire no encontrado."
         )
 
-    # Cargar relaciones
-    detections = crud.get_detections_by_image(db, image_id=image_id)
-    confirmations = crud.get_confirmations_by_image(db, image_id=image_id)
-
-    return {
-        **db_image.__dict__,
-        "detections": detections,
-        "confirmations": confirmations
-    }
-
-
-@router.get("/images", response_model=List[schemas.ImageResponse])
-def listar_imagenes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar todas las imagenes ordenadas por fecha (mas reciente primero)"""
-    return crud.get_images(db=db, skip=skip, limit=limit)
-
-
-@router.get("/images/with-detections/list", response_model=List[schemas.ImageResponse])
-def listar_imagenes_con_detecciones(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar solo imagenes que tienen al menos una deteccion"""
-    return crud.get_images_with_detections(db=db, skip=skip, limit=limit)
-
-
-@router.delete("/images/{image_id}", response_model=schemas.MessageResponse)
-def eliminar_imagen(image_id: int, db: Session = Depends(get_db)):
-    """Eliminar imagen y todas sus detecciones y confirmaciones asociadas"""
-    success = crud.delete_image(db, image_id=image_id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Imagen no encontrada"
-        )
-    return {
-        "status": "success",
-        "message": f"Imagen {image_id} eliminada correctamente"
-    }
-
-
-# ============================================================================
-# ENDPOINTS DE DETECCIONES
-# ============================================================================
-
-@router.get("/detections", response_model=List[schemas.DetectionResponse])
-def listar_detecciones(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar todas las detecciones ordenadas por fecha (mas reciente primero)"""
-    return crud.get_detections(db=db, skip=skip, limit=limit)
-
-
-@router.get("/detections/by-confidence/{min_confidence}", response_model=List[schemas.DetectionResponse])
-def listar_detecciones_por_confianza(min_confidence: float, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar detecciones con confianza mayor o igual al minimo especificado"""
-    if min_confidence < 0.0 or min_confidence > 1.0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La confianza debe estar entre 0.0 y 1.0"
-        )
-    return crud.get_detections_by_confidence(db=db, min_confidence=min_confidence, skip=skip, limit=limit)
-
-
-@router.get("/detections/image/{image_id}", response_model=List[schemas.DetectionResponse])
-def listar_detecciones_por_imagen(image_id: int, db: Session = Depends(get_db)):
-    """Obtener todas las detecciones de una imagen especifica"""
-    # Verificar que la imagen existe
-    db_image = crud.get_image_by_id(db, image_id=image_id)
-    if db_image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Imagen no encontrada"
-        )
-    return crud.get_detections_by_image(db=db, image_id=image_id)
-
-
-@router.get("/detections/{detection_id}", response_model=schemas.DetectionResponse)
-def obtener_deteccion(detection_id: int, db: Session = Depends(get_db)):
-    """Obtener informacion de una deteccion especifica"""
-    db_detection = crud.get_detection_by_id(db, detection_id=detection_id)
-    if db_detection is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deteccion no encontrada"
-        )
-    return db_detection
-
-
-# ============================================================================
-# ENDPOINTS DE CONFIRMACIONES
-# ============================================================================
-
-@router.post("/confirmations", response_model=schemas.ConfirmationResponse, status_code=status.HTTP_201_CREATED)
-def crear_confirmacion(confirmation: schemas.ConfirmationCreate, db: Session = Depends(get_db)):
-    """Crear confirmacion (usuario confirma o rechaza una imagen con detecciones)"""
-    # Verificar que la imagen existe
-    db_image = crud.get_image_by_id(db, image_id=confirmation.image_id)
-    if db_image is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Imagen no encontrada"
-        )
-
-    # Verificar que el usuario existe
-    db_user = crud.get_user_by_id(db, user_id=confirmation.user_id)
-    if db_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
-
-    return crud.create_confirmation(db=db, confirmation=confirmation)
-
-
-@router.get("/confirmations", response_model=List[schemas.ConfirmationResponse])
-def listar_confirmaciones(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar todas las confirmaciones ordenadas por fecha (mas reciente primero)"""
-    return crud.get_confirmations(db=db, skip=skip, limit=limit)
-
-
-@router.get("/confirmations/user/{user_id}", response_model=List[schemas.ConfirmationResponse])
-def listar_confirmaciones_por_usuario(user_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Obtener todas las confirmaciones realizadas por un usuario"""
-    # Verificar que el usuario existe
-    db_user = crud.get_user_by_id(db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
-    return crud.get_confirmations_by_user(db=db, user_id=user_id, skip=skip, limit=limit)
-
-
-@router.get("/confirmations/status/{status}", response_model=List[schemas.ConfirmationResponse])
-def listar_confirmaciones_por_estado(status: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Obtener confirmaciones filtradas por estado (confirmed o rejected)"""
-    if status not in ["confirmed", "rejected"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El estado debe ser 'confirmed' o 'rejected'"
-        )
-    return crud.get_confirmations_by_status(db=db, status=status, skip=skip, limit=limit)
-
-
-# ============================================================================
-# ENDPOINTS DE CALIDAD DEL AIRE
-# ============================================================================
-
-@router.post("/air-quality", response_model=schemas.AirQualityResponse, status_code=status.HTTP_201_CREATED)
-def crear_registro_calidad_aire(air_quality: schemas.AirQualityCreate, db: Session = Depends(get_db)):
-    """Crear nuevo registro de calidad del aire"""
-    return crud.create_air_quality(db=db, air_quality=air_quality)
-
-
-@router.get("/air-quality/latest", response_model=schemas.AirQualityResponse)
-def obtener_ultima_calidad_aire(db: Session = Depends(get_db)):
-    """Obtener el registro mas reciente de calidad del aire"""
-    latest = crud.get_latest_air_quality(db=db)
-    if latest is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No hay registros de calidad del aire"
-        )
-    return latest
-
-
-@router.get("/air-quality/averages/{hours}")
-def obtener_promedios_calidad_aire(hours: int, db: Session = Depends(get_db)):
-    """Calcular promedios de calidad del aire en las ultimas N horas"""
-    if hours <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El numero de horas debe ser mayor a 0"
-        )
-    return crud.get_air_quality_averages(db=db, hours=hours)
-
-
-@router.get("/air-quality", response_model=List[schemas.AirQualityResponse])
-def listar_registros_calidad_aire(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar registros de calidad del aire ordenados por fecha (mas reciente primero)"""
-    return crud.get_air_quality_records(db=db, skip=skip, limit=limit)
-
-
-@router.get("/air-quality/{record_id}", response_model=schemas.AirQualityResponse)
-def obtener_registro_calidad_aire(record_id: int, db: Session = Depends(get_db)):
-    """Obtener registro especifico de calidad del aire"""
-    record = crud.get_air_quality_by_id(db, record_id=record_id)
-    if record is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Registro no encontrado"
-        )
-    return record
-
-
-# ============================================================================
-# ENDPOINTS statusIsla
-# ============================================================================
-
-@router.post("/statusIsla", status_code=status.HTTP_201_CREATED)
-def recibir_status_isla(payload: schemas.StatusPayload):
-    """Recibe un status y lo anade al historial en un archivo JSON."""
-    file_path = "status_isla.json"
-    new_entry = {"status": payload.status, "timestamp": payload.timestamp}
-
-    try:
-        with open(file_path, "r") as f:
-            history = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        history = []
-
-    history.append(new_entry)
-
-    with open(file_path, "w") as f:
-        json.dump(history, f, indent=4)
-
-    return {"detail": f"Status '{payload.status}' anadido al historial."}
-
-
-# ver el historial de status de la isla
-@router.get("/statusIsla", response_model=List[schemas.StatusPayload])
-def obtener_historial_status_isla():
-    file_path = "status_isla.json"
-
-    try:
-        with open(file_path, "r") as f:
-            history = json.load(f)
-            if not history:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="El historial de status esta vacio."
-                )
-            return history
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No se ha recibido ningun status aun."
-        )
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al leer el archivo de historial. Formato invalido."
-        )
+    return db_registro

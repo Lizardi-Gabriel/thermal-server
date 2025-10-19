@@ -1,44 +1,43 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
-from app import models, schemas
-from passlib.context import CryptContext
 from typing import List, Optional
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-# ============================================================================
-# OPERACIONES CRUD PARA USUARIOS
-# ============================================================================
-
-def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
-    """Obtener usuario por nombre de usuario"""
-    return db.query(models.User).filter(models.User.username == username).first()
+from app import models, schemas
+from app.security import hashear_password
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
-    """Obtener usuario por correo electronico"""
-    return db.query(models.User).filter(models.User.email == email).first()
+# OPERACIONES CRUD PARA Usuario
+
+def get_user_by_id(db: Session, usuario_id: int) -> Optional[models.Usuario]:
+    """Obtener un usuario por su ID."""
+    return db.query(models.Usuario).filter(models.Usuario.usuario_id == usuario_id).first()
 
 
-def get_user_by_id(db: Session, user_id: int) -> Optional[models.User]:
-    """Obtener usuario por ID"""
-    return db.query(models.User).filter(models.User.user_id == user_id).first()
+def get_user_by_username(db: Session, nombre_usuario: str) -> Optional[models.Usuario]:
+    """Obtener un usuario por su nombre de usuario."""
+    return db.query(models.Usuario).filter(models.Usuario.nombre_usuario == nombre_usuario).first()
 
 
-def get_users(db: Session, skip: int = 0, limit: int = 100) -> List[models.User]:
-    """Obtener lista de usuarios con paginacion"""
-    return db.query(models.User).offset(skip).limit(limit).all()
+def get_user_by_email(db: Session, correo_electronico: str) -> Optional[models.Usuario]:
+    """Obtener un usuario por su correo electrónico."""
+    return db.query(models.Usuario).filter(models.Usuario.correo_electronico == correo_electronico).first()
 
 
-def create_user(db: Session, user: schemas.UserCreate) -> models.User:
-    """Crear nuevo usuario con password hasheado"""
-    hashed_password = pwd_context.hash(user.password)
-    db_user = models.User(
-        username=user.username,
-        email=user.email,
-        password_hash=hashed_password,
-        role=user.role
+def get_users(db: Session, skip: int = 0, limit: int = 100) -> List[models.Usuario]:
+    """Obtener una lista de usuarios con paginación."""
+    return db.query(models.Usuario).offset(skip).limit(limit).all()
+
+
+def create_user(db: Session, user: schemas.UsuarioCreate) -> models.Usuario:
+    """Crear un nuevo usuario con la contraseña hasheada."""
+    print('-----' *20)
+    print('password original: ' + user.password)
+    hashed_password = hashear_password(user.password)
+    print('password hashed: ' + hashed_password)
+    db_user = models.Usuario(
+        nombre_usuario=user.nombre_usuario,
+        correo_electronico=user.correo_electronico,
+        hash_contrasena=hashed_password,
+        rol=user.rol
     )
     db.add(db_user)
     db.commit()
@@ -46,237 +45,147 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     return db_user
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verificar que la contrasena coincida con el hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+# OPERACIONES CRUD PARA Evento
 
-
-def delete_user(db: Session, user_id: int) -> bool:
-    """Eliminar usuario por ID"""
-    user = get_user_by_id(db, user_id)
-    if user:
-        db.delete(user)
-        db.commit()
-        return True
-    return False
-
-
-# ============================================================================
-# OPERACIONES CRUD PARA IMAGENES
-# ============================================================================
-
-def create_image(db: Session, image: schemas.ImageCreate) -> models.Image:
-    """Crear nuevo registro de imagen"""
-    db_image = models.Image(image_path=image.image_path)
-    db.add(db_image)
-    db.commit()
-    db.refresh(db_image)
-    return db_image
-
-
-def get_image_by_id(db: Session, image_id: int) -> Optional[models.Image]:
-    """Obtener imagen por ID"""
-    return db.query(models.Image).filter(models.Image.image_id == image_id).first()
-
-
-def get_images(db: Session, skip: int = 0, limit: int = 100) -> List[models.Image]:
-    """Obtener lista de imagenes ordenadas por fecha de carga (mas reciente primero)"""
-    return db.query(models.Image).order_by(desc(models.Image.upload_time)).offset(skip).limit(limit).all()
-
-
-def get_images_with_detections(db: Session, skip: int = 0, limit: int = 100) -> List[models.Image]:
-    """Obtener imagenes que tienen al menos una deteccion"""
-    return db.query(models.Image).filter(models.Image.number_of_detections > 0).order_by(desc(models.Image.upload_time)).offset(skip).limit(limit).all()
-
-
-def update_image_detection_count(db: Session, image_id: int) -> Optional[models.Image]:
-    """Actualizar contador de detecciones de una imagen"""
-    image = get_image_by_id(db, image_id)
-    if image:
-        detection_count = db.query(models.Detection).filter(models.Detection.image_id == image_id).count()
-        image.number_of_detections = detection_count
-        db.commit()
-        db.refresh(image)
-    return image
-
-
-def delete_image(db: Session, image_id: int) -> bool:
-    """Eliminar imagen (cascade delete eliminara detecciones y confirmaciones)"""
-    image = get_image_by_id(db, image_id)
-    if image:
-        db.delete(image)
-        db.commit()
-        return True
-    return False
-
-
-# ============================================================================
-# OPERACIONES CRUD PARA DETECCIONES
-# ============================================================================
-
-def create_detection(db: Session, detection: schemas.DetectionCreate) -> models.Detection:
-    """Crear nueva deteccion y actualizar contador en imagen"""
-    db_detection = models.Detection(
-        image_id=detection.image_id,
-        confianza=detection.confianza,
-        x1=detection.x1,
-        y1=detection.y1,
-        x2=detection.x2,
-        y2=detection.y2
+def get_evento_by_id(db: Session, evento_id: int) -> Optional[models.Evento]:
+    """ Obtener un evento por su ID, cargando también sus relaciones (usuario, imágenes, detecciones y calidad del
+    aire)."""
+    return (
+        db.query(models.Evento)
+        .options(
+            joinedload(models.Evento.usuario),
+            joinedload(models.Evento.imagenes).joinedload(models.Imagen.detecciones),
+            joinedload(models.Evento.registros_calidad_aire)
+        )
+        .filter(models.Evento.evento_id == evento_id)
+        .first()
     )
-    db.add(db_detection)
-    db.commit()
-    db.refresh(db_detection)
-
-    # Actualizar contador de detecciones en la imagen
-    update_image_detection_count(db, detection.image_id)
-
-    return db_detection
 
 
-def get_detection_by_id(db: Session, detection_id: int) -> Optional[models.Detection]:
-    """Obtener deteccion por ID"""
-    return db.query(models.Detection).filter(models.Detection.detection_id == detection_id).first()
-
-
-def get_detections(db: Session, skip: int = 0, limit: int = 100) -> List[models.Detection]:
-    """Obtener lista de detecciones ordenadas por fecha (mas reciente primero)"""
-    return db.query(models.Detection).order_by(desc(models.Detection.detection_time)).offset(skip).limit(limit).all()
-
-
-def get_detections_by_image(db: Session, image_id: int) -> List[models.Detection]:
-    """Obtener todas las detecciones de una imagen especifica"""
-    return db.query(models.Detection).filter(models.Detection.image_id == image_id).order_by(desc(models.Detection.detection_time)).all()
-
-
-def get_detections_by_confidence(db: Session, min_confidence: float, skip: int = 0, limit: int = 100) -> List[models.Detection]:
-    """Obtener detecciones con confianza mayor o igual al minimo especificado"""
-    return db.query(models.Detection).filter(models.Detection.confianza >= min_confidence).order_by(desc(models.Detection.detection_time)).offset(skip).limit(limit).all()
-
-
-def delete_detection(db: Session, detection_id: int) -> bool:
-    """Eliminar deteccion y actualizar contador en imagen"""
-    detection = get_detection_by_id(db, detection_id)
-    if detection:
-        image_id = detection.image_id
-        db.delete(detection)
-        db.commit()
-        update_image_detection_count(db, image_id)
-        return True
-    return False
-
-
-# ============================================================================
-# OPERACIONES CRUD PARA CONFIRMACIONES
-# ============================================================================
-
-def create_confirmation(db: Session, confirmation: schemas.ConfirmationCreate) -> models.Confirmation:
-    """Crear nueva confirmacion (usuario confirma o rechaza una imagen)"""
-    db_confirmation = models.Confirmation(
-        image_id=confirmation.image_id,
-        user_id=confirmation.user_id,
-        status=confirmation.status
+def get_eventos(db: Session, skip: int = 0, limit: int = 100) -> List[models.Evento]:
+    """Obtener una lista de eventos ordenados por fecha (más recientes primero)."""
+    return (
+        db.query(models.Evento)
+        .options(
+            joinedload(models.Evento.usuario),
+            joinedload(models.Evento.imagenes).joinedload(models.Imagen.detecciones),
+            joinedload(models.Evento.registros_calidad_aire)
+        )
+        .order_by(desc(models.Evento.fecha_evento)).offset(skip).limit(limit).all()
     )
-    db.add(db_confirmation)
-    db.commit()
-    db.refresh(db_confirmation)
-    return db_confirmation
 
 
-def get_confirmation_by_id(db: Session, confirmation_id: int) -> Optional[models.Confirmation]:
-    """Obtener confirmacion por ID"""
-    return db.query(models.Confirmation).filter(models.Confirmation.confirmation_id == confirmation_id).first()
-
-
-def get_confirmations(db: Session, skip: int = 0, limit: int = 100) -> List[models.Confirmation]:
-    """Obtener lista de confirmaciones ordenadas por fecha (mas reciente primero)"""
-    return db.query(models.Confirmation).order_by(desc(models.Confirmation.confirmation_time)).offset(skip).limit(limit).all()
-
-
-def get_confirmations_by_image(db: Session, image_id: int) -> List[models.Confirmation]:
-    """Obtener todas las confirmaciones de una imagen especifica"""
-    return db.query(models.Confirmation).filter(models.Confirmation.image_id == image_id).order_by(desc(models.Confirmation.confirmation_time)).all()
-
-
-def get_confirmations_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[models.Confirmation]:
-    """Obtener todas las confirmaciones realizadas por un usuario"""
-    return db.query(models.Confirmation).filter(models.Confirmation.user_id == user_id).order_by(desc(models.Confirmation.confirmation_time)).offset(skip).limit(limit).all()
-
-
-def get_confirmations_by_status(db: Session, status: str, skip: int = 0, limit: int = 100) -> List[models.Confirmation]:
-    """Obtener confirmaciones filtradas por estado (confirmed o rejected)"""
-    return db.query(models.Confirmation).filter(models.Confirmation.status == status).order_by(desc(models.Confirmation.confirmation_time)).offset(skip).limit(limit).all()
-
-
-def delete_confirmation(db: Session, confirmation_id: int) -> bool:
-    """Eliminar confirmacion"""
-    confirmation = get_confirmation_by_id(db, confirmation_id)
-    if confirmation:
-        db.delete(confirmation)
-        db.commit()
-        return True
-    return False
-
-
-# ============================================================================
-# OPERACIONES CRUD PARA CALIDAD DEL AIRE
-# ============================================================================
-
-def create_air_quality(db: Session, air_quality: schemas.AirQualityCreate) -> models.AirQuality:
-    """Crear nuevo registro de calidad del aire"""
-    db_air_quality = models.AirQuality(
-        pm25=air_quality.pm25,
-        pm10=air_quality.pm10,
-        pm01=air_quality.pm01
+def get_eventos_por_fecha(db: Session, fecha_evento) -> List[models.Evento]:
+    """Obtener una lista de eventos para una fecha específica."""
+    return (
+        db.query(models.Evento)
+        .options(
+            joinedload(models.Evento.usuario),
+            joinedload(models.Evento.imagenes).joinedload(models.Imagen.detecciones),
+            joinedload(models.Evento.registros_calidad_aire)
+        )
+        .filter(models.Evento.fecha_evento == fecha_evento)
+        .all()
     )
-    db.add(db_air_quality)
+
+
+
+def create_evento(db: Session, evento: schemas.EventoCreate) -> models.Evento:
+    """Crear un nuevo evento."""
+    db_evento = models.Evento(**evento.model_dump())
+    db.add(db_evento)
     db.commit()
-    db.refresh(db_air_quality)
-    return db_air_quality
+    db.refresh(db_evento)
+    return db_evento
 
 
-def get_air_quality_by_id(db: Session, record_id: int) -> Optional[models.AirQuality]:
-    """Obtener registro de calidad del aire por ID"""
-    return db.query(models.AirQuality).filter(models.AirQuality.record_id == record_id).first()
+def update_evento(db: Session, evento_id: int, evento_update: schemas.EventoUpdate) -> Optional[models.Evento]:
+    """Actualizar el estatus, usuario y descripción de un evento."""
+    db_evento = get_evento_by_id(db, evento_id)
+    if db_evento:
+        db_evento.estatus = evento_update.estatus
+        db_evento.usuario_id = evento_update.usuario_id
+        if evento_update.descripcion is not None:
+            db_evento.descripcion = evento_update.descripcion
+        db.commit()
+        db.refresh(db_evento)
+    return db_evento
 
 
-def get_air_quality_records(db: Session, skip: int = 0, limit: int = 100) -> List[models.AirQuality]:
-    """Obtener registros de calidad del aire ordenados por fecha (mas reciente primero)"""
-    return db.query(models.AirQuality).order_by(desc(models.AirQuality.measurement_time)).offset(skip).limit(limit).all()
+def update_evento_descripcion(db: Session, evento_id: int, evento_update: schemas.EventoUpateDescripcion) -> Optional[models.Evento]:
+    """Actualizar únicamente la descripción de un evento."""
+    db_evento = get_evento_by_id(db, evento_id)
+    if db_evento:
+        db_evento.descripcion = evento_update.descripcion
+        db.commit()
+        db.refresh(db_evento)
+    return db_evento
 
 
-def get_latest_air_quality(db: Session) -> Optional[models.AirQuality]:
-    """Obtener el registro mas reciente de calidad del aire"""
-    return db.query(models.AirQuality).order_by(desc(models.AirQuality.measurement_time)).first()
-
-
-def get_air_quality_averages(db: Session, hours: int = 24) -> dict:
-    """Calcular promedios de calidad del aire en las ultimas N horas"""
-    from sqlalchemy import func
-    from datetime import datetime, timedelta
-
-    time_threshold = datetime.now() - timedelta(hours=hours)
-
-    result = db.query(
-        func.avg(models.AirQuality.pm25).label('avg_pm25'),
-        func.avg(models.AirQuality.pm10).label('avg_pm10'),
-        func.avg(models.AirQuality.pm01).label('avg_pm01')
-    ).filter(models.AirQuality.measurement_time >= time_threshold).first()
-
-    return {
-        'avg_pm25': float(result.avg_pm25) if result.avg_pm25 else 0.0,
-        'avg_pm10': float(result.avg_pm10) if result.avg_pm10 else 0.0,
-        'avg_pm01': float(result.avg_pm01) if result.avg_pm01 else 0.0,
-        'period_hours': hours
-    }
-
-
-def delete_air_quality(db: Session, record_id: int) -> bool:
-    """Eliminar registro de calidad del aire"""
-    record = get_air_quality_by_id(db, record_id)
-    if record:
-        db.delete(record)
+def delete_evento(db: Session, evento_id: int) -> bool:
+    """Eliminar un evento por su ID."""
+    db_evento = db.query(models.Evento).filter(models.Evento.evento_id == evento_id).first()
+    if db_evento:
+        db.delete(db_evento)
         db.commit()
         return True
     return False
+
+
+# OPERACIONES CRUD PARA Imagen Y Deteccion (a menudo se crean juntas)
+
+def create_imagen_con_detecciones(db: Session, evento_id: int, imagen: schemas.ImagenBase, detecciones: List[schemas.DeteccionBase]) -> models.Imagen:
+    """Crear una imagen y sus detecciones asociadas dentro de un evento."""
+
+    # 1. Crear la Imagen
+    db_imagen = models.Imagen(ruta_imagen=imagen.ruta_imagen, evento_id=evento_id)
+    db.add(db_imagen)
+    db.commit()
+    db.refresh(db_imagen)
+
+    # 2. Crear las Detecciones asociadas a la imagen recién creada
+    for det in detecciones:
+        db_det = models.Deteccion(**det.model_dump(), imagen_id=db_imagen.imagen_id)
+        db.add(db_det)
+
+    db.commit()
+    db.refresh(db_imagen)
+    return db_imagen
+
+
+# OPERACIONES CRUD PARA CalidadAire
+
+def create_calidad_aire(db: Session, registro: schemas.CalidadAireCreate) -> models.CalidadAire:
+    """Crear un nuevo registro de calidad del aire para un evento."""
+    db_registro = models.CalidadAire(**registro.model_dump())
+    db.add(db_registro)
+    db.commit()
+    db.refresh(db_registro)
+    return db_registro
+
+
+def get_registros_calidad_aire_por_evento(db: Session, evento_id: int) -> List[models.CalidadAire]:
+    """Obtener todos los registros de calidad de aire de un evento específico."""
+    return db.query(models.CalidadAire).filter(models.CalidadAire.evento_id == evento_id).all()
+
+
+def update_calidad_aire_tipo(db: Session, registro_id: int, nuevo_tipo: schemas.TipoMedicionEnum) -> Optional[models.CalidadAire]:
+    """Actualizar el tipo de un registro de calidad del aire."""
+    db_registro = db.query(models.CalidadAire).filter(models.CalidadAire.registro_id == registro_id).first()
+    if db_registro:
+        db_registro.tipo = nuevo_tipo
+        db.commit()
+        db.refresh(db_registro)
+    return db_registro
+
+
+# OPERACIONES CRUD PARA LogSistema
+
+def create_log(db: Session, log: schemas.LogSistemaCreate) -> models.LogSistema:
+    """Crear un nuevo registro de log en el sistema."""
+    db_log = models.LogSistema(**log.model_dump())
+    db.add(db_log)
+    db.commit()
+    db.refresh(db_log)
+    return db_log
 

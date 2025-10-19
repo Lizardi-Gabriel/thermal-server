@@ -1,166 +1,190 @@
 from pydantic import BaseModel, EmailStr, Field
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
+from app.models import RolUsuarioEnum, EstatusEventoEnum, TipoMedicionEnum, TipoLogEnum
 
 
-# Schemas para Usuario
-class UserBase(BaseModel):
-    """Schema base para usuario"""
-    username: str = Field(..., description="Nombre de usuario unico")
-    email: EmailStr = Field(..., description="Correo electronico del usuario")
+# ESQUEMAS PARA USUARIOS
+
+class UsuarioBase(BaseModel):
+    """Schema base con los campos comunes de un usuario."""
+    nombre_usuario: str = Field(..., max_length=50, description="Nombre de usuario único")
+    correo_electronico: EmailStr = Field(..., description="Correo electrónico del usuario")
 
 
-class UserCreate(UserBase):
-    """Schema para crear nuevo usuario"""
-    password: str = Field(..., min_length=8, description="Contrasena del usuario (minimo 8 caracteres)")
-    role: Optional[str] = Field("operador", description="Rol del usuario: admin u operador")
+class UsuarioCreate(UsuarioBase):
+    """Schema para la creación de un nuevo usuario."""
+    password: str = Field(..., min_length=8, description="Contraseña del usuario (mínimo 8 caracteres)")
+    rol: Optional[RolUsuarioEnum] = RolUsuarioEnum.operador
 
 
-class UserResponse(UserBase):
-    """Schema de respuesta con datos del usuario"""
-    user_id: int = Field(..., description="ID unico del usuario")
-    role: str = Field(..., description="Rol asignado al usuario")
+class Usuario(UsuarioBase):
+    """Schema para leer los datos de un usuario (respuesta de la API)."""
+    usuario_id: int
+    rol: RolUsuarioEnum
 
     class Config:
         from_attributes = True
 
 
-# Schemas para Imagen
-class ImageBase(BaseModel):
-    """Schema base para imagen"""
-    image_path: str = Field(..., description="Ruta donde se almacena la imagen")
+# ESQUEMAS PARA DETECCION
+
+class DeteccionBase(BaseModel):
+    """Schema base para una detección."""
+    confianza: float = Field(..., ge=0.0, le=1.0, description="Nivel de confianza de la detección (0-1)")
+    x1: int
+    y1: int
+    x2: int
+    y2: int
 
 
-class ImageCreate(ImageBase):
-    """Schema para registrar nueva imagen"""
+class DeteccionCreate(DeteccionBase):
+    """Schema para crear una nueva detección asociada a una imagen."""
+    imagen_id: int
+
+
+class Deteccion(DeteccionBase):
+    """Schema para leer los datos de una detección."""
+    deteccion_id: int
+    imagen_id: int
+
+    class Config:
+        from_attributes = True
+
+
+# ESQUEMAS PARA IMAGENES
+
+class ImagenBase(BaseModel):
+    """Schema base para una imagen."""
+    ruta_imagen: str = Field(..., max_length=255, description="URL o ruta de la imagen")
+
+
+class ImagenCreate(ImagenBase):
+    """Schema para crear una nueva imagen asociada a un evento."""
+    evento_id: int
+
+
+class Imagen(ImagenBase):
+    """Schema para leer los datos de una imagen."""
+    imagen_id: int
+    evento_id: int
+    hora_subida: datetime
+    # Relación anidada: Muestra las detecciones de esta imagen
+    detecciones: List[Deteccion] = []
+
+    class Config:
+        from_attributes = True
+
+
+# ESQUEMAS PARA calidad de aire
+
+class CalidadAireBase(BaseModel):
+    """Schema base para un registro de calidad del aire."""
+    pm25: float
+    pm10: float
+    pm01: float
+    tipo: TipoMedicionEnum = TipoMedicionEnum.pendiente
+
+
+class CalidadAireCreate(CalidadAireBase):
+    """Schema para crear un nuevo registro de calidad de aire para un evento."""
+    evento_id: int
+
+
+class CalidadAire(CalidadAireBase):
+    """Schema para leer un registro de calidad del aire."""
+    registro_id: int
+    evento_id: int
+    hora_medicion: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ESQUEMAS PARA EVENTOS
+
+class EventoBase(BaseModel):
+    """Schema base para un evento."""
+    fecha_evento: date
+    descripcion: Optional[str] = None
+    estatus: EstatusEventoEnum = EstatusEventoEnum.pendiente
+
+
+class EventoCreate(EventoBase):
+    """Schema para crear un nuevo evento."""
+    pass # No necesita campos adicionales para la creación básica
+
+
+class EventoUpdate(BaseModel):
+    """Schema para actualizar el estatus de un evento y asignar un usuario."""
+    estatus: EstatusEventoEnum
+    usuario_id: int
+    descripcion: Optional[str] = None
+
+
+class EventoUpateDescripcion(BaseModel):
+    """Schema para actualizar solo la descripcion de un evento."""
+    descripcion: str
+
+
+class Evento(EventoBase):
+    """Schema completo para leer un evento, incluyendo sus relaciones."""
+    evento_id: int
+    usuario_id: Optional[int] = None
+
+    # Relaciones anidadas para una respuesta completa
+    usuario: Optional[Usuario] = None
+    imagenes: List[Imagen] = []
+    registros_calidad_aire: List[CalidadAire] = []
+
+    class Config:
+        from_attributes = True
+
+
+# ESQUEMAS PARA LOGS
+
+class LogSistemaBase(BaseModel):
+    """Schema base para un log del sistema."""
+    tipo: TipoLogEnum = TipoLogEnum.info
+    mensaje: str
+
+
+class LogSistemaCreate(LogSistemaBase):
+    """Schema para crear un nuevo log."""
     pass
 
 
-class ImageResponse(ImageBase):
-    """Schema de respuesta con datos de la imagen"""
-    image_id: int = Field(..., description="ID unico de la imagen")
-    upload_time: datetime = Field(..., description="Fecha y hora de carga")
-    number_of_detections: int = Field(..., description="Numero total de detecciones en esta imagen")
+class LogSistema(LogSistemaBase):
+    """Schema para leer un log del sistema."""
+    log_id: int
+    hora_log: datetime
 
     class Config:
         from_attributes = True
 
 
-# Schemas para Deteccion
-class DetectionBase(BaseModel):
-    """Schema base para deteccion"""
-    confianza: float = Field(..., ge=0.0, le=1.0, description="Nivel de confianza de la deteccion (0-1)")
-    x1: int = Field(..., description="Coordenada X1 del bounding box")
-    y1: int = Field(..., description="Coordenada Y1 del bounding box")
-    x2: int = Field(..., description="Coordenada X2 del bounding box")
-    y2: int = Field(..., description="Coordenada Y2 del bounding box")
+# ESQUEMAS PARA AUTENTICACION
+
+class Token(BaseModel):
+    """Schema para la respuesta del token JWT."""
+    access_token: str
+    token_type: str = "bearer"
 
 
-
-class DetectionCreate(DetectionBase):
-    """Schema para crear nueva deteccion"""
-    image_id: int = Field(..., description="ID de la imagen donde se realizo la deteccion")
-
-
-class DetectionResponse(DetectionBase):
-    """Schema de respuesta con datos de la deteccion"""
-    detection_id: int = Field(..., description="ID unico de la deteccion")
-    image_id: int = Field(..., description="ID de la imagen asociada")
-    detection_time: datetime = Field(..., description="Fecha y hora de la deteccion")
-
-    class Config:
-        from_attributes = True
+class TokenData(BaseModel):
+    """Schema para los datos contenidos dentro de un token JWT (payload)."""
+    nombre_usuario: Optional[str] = None
 
 
-class DetectionWithImage(DetectionResponse):
-    """Schema de deteccion con informacion de la imagen"""
-    image: ImageResponse = Field(..., description="Datos de la imagen asociada")
+class UsuarioLogin(BaseModel):
+    """Schema para el login de usuario."""
+    username: str
+    password: str
 
 
-# Schemas para Confirmacion
-class ConfirmationBase(BaseModel):
-    """Schema base para confirmacion"""
-    status: str = Field(..., description="Estado de la confirmacion: confirmed o rejected")
+class ImagenConDetecciones(BaseModel):
+    """Schema para recibir una imagen con sus detecciones en una sola petición."""
+    imagen: ImagenBase
+    detecciones: List[DeteccionBase]
 
 
-class ConfirmationCreate(ConfirmationBase):
-    """Schema para crear nueva confirmacion"""
-    image_id: int = Field(..., description="ID de la imagen a confirmar/rechazar")
-    user_id: int = Field(..., description="ID del usuario que realiza la confirmacion")
-
-
-class ConfirmationResponse(ConfirmationBase):
-    """Schema de respuesta con datos de la confirmacion"""
-    confirmation_id: int = Field(..., description="ID unico de la confirmacion")
-    image_id: int = Field(..., description="ID de la imagen confirmada/rechazada")
-    user_id: int = Field(..., description="ID del usuario que realizo la confirmacion")
-    confirmation_time: datetime = Field(..., description="Fecha y hora de la confirmacion")
-
-    class Config:
-        from_attributes = True
-
-
-class ConfirmationWithDetails(ConfirmationResponse):
-    """Schema de confirmacion con detalles de usuario e imagen"""
-    user: UserResponse = Field(..., description="Datos del usuario que confirmo")
-    image: ImageResponse = Field(..., description="Datos de la imagen confirmada")
-
-
-# Schemas para Calidad del Aire
-class AirQualityBase(BaseModel):
-    """Schema base para calidad del aire"""
-    pm25: float = Field(..., ge=0, description="Particulas PM2.5 (microgramos por metro cubico)")
-    pm10: float = Field(..., ge=0, description="Particulas PM10 (microgramos por metro cubico)")
-    pm01: float = Field(..., ge=0, description="Particulas PM0.1 (microgramos por metro cubico)")
-
-
-class AirQualityCreate(AirQualityBase):
-    """Schema para registrar nueva medicion de calidad del aire"""
-    pass
-
-
-class AirQualityResponse(AirQualityBase):
-    """Schema de respuesta con datos de calidad del aire"""
-    record_id: int = Field(..., description="ID unico del registro")
-    measurement_time: datetime = Field(..., description="Fecha y hora de la medicion")
-
-    class Config:
-        from_attributes = True
-
-
-# Schemas compuestos para endpoints especificos
-class ImageWithDetections(ImageResponse):
-    """Schema de imagen con todas sus detecciones"""
-    detections: List[DetectionResponse] = Field(default=[], description="Lista de detecciones en esta imagen")
-
-
-class ImageWithConfirmations(ImageResponse):
-    """Schema de imagen con todas sus confirmaciones"""
-    confirmations: List[ConfirmationResponse] = Field(default=[], description="Lista de confirmaciones de esta imagen")
-
-
-class ImageComplete(ImageResponse):
-    """Schema completo de imagen con detecciones y confirmaciones"""
-    detections: List[DetectionResponse] = Field(default=[], description="Lista de detecciones en esta imagen")
-    confirmations: List[ConfirmationResponse] = Field(default=[], description="Lista de confirmaciones de esta imagen")
-
-
-# Schema para respuestas de API
-class MessageResponse(BaseModel):
-    """Schema para mensajes de respuesta genericos"""
-    message: str = Field(..., description="Mensaje de respuesta")
-    status: str = Field("success", description="Estado de la operacion: success o error")
-
-
-class HealthCheckResponse(BaseModel):
-    """Schema para verificacion de estado del sistema"""
-    status: str = Field(..., description="Estado del servicio")
-    message: str = Field(..., description="Mensaje descriptivo")
-    timestamp: datetime = Field(default_factory=datetime.now, description="Fecha y hora de la verificacion")
-
-
-# statusIsla
-class StatusPayload(BaseModel):
-    """Define el cuerpo esperado para la peticion de status"""
-    status: str
-    timestamp: str

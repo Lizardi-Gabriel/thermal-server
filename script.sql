@@ -5,59 +5,82 @@ CREATE DATABASE thermal_monitoring
 
 USE thermal_monitoring;
 
+
 -- Tabla de usuarios
-CREATE TABLE users (
-                       user_id INT AUTO_INCREMENT PRIMARY KEY,
-                       username VARCHAR(50) UNIQUE NOT NULL,
-                       email VARCHAR(100) UNIQUE NOT NULL,
-                       password_hash VARCHAR(255) NOT NULL,
-                       role ENUM('admin', 'operador') DEFAULT 'operador',
-                       INDEX idx_username (username)
+CREATE TABLE usuarios(
+                         usuario_id INT AUTO_INCREMENT PRIMARY KEY,
+                         nombre_usuario VARCHAR(50) UNIQUE NOT NULL,
+                         correo_electronico VARCHAR(100) UNIQUE NOT NULL,
+                         hash_contrasena VARCHAR(1024) NOT NULL,
+                         rol ENUM('admin', 'operador') DEFAULT 'operador',
+                         INDEX idx_nombre_usuario (nombre_usuario)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- cada usuario confirma o descarta un eventos
+-- un evento solo es confirmado o descartado por un usuario
 
--- Tabla imagenes con al menos una deteccion
-create table images (
-                        image_id INT AUTO_INCREMENT PRIMARY KEY,
-                        image_path VARCHAR(255) NOT NULL,
-                        upload_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        number_of_detections INT DEFAULT 0,
-                        INDEX idx_upload_time (upload_time)
+
+-- tabla de eventos
+-- cada evento tiene imagenes
+-- una imagen solo pertenece a un evento
+CREATE TABLE eventos(
+                        evento_id INT AUTO_INCREMENT PRIMARY KEY,
+                        fecha_evento DATE NOT NULL, -- fecha sin hora
+                        descripcion TEXT, -- llm o manual añade descripcion del evento
+                        estatus ENUM('confirmado', 'descartado', 'pendiente') DEFAULT 'pendiente', -- asigando por un usuario
+                        usuario_id INT, -- usuario que confirma o descarta el evento
+                        FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id) ON DELETE SET NULL,
+                        INDEX idx_fecha_evento (fecha_evento)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla imagenes, cada imagen tiene detecciones
+-- cada deteccion pertenece a una imagen
+CREATE TABLE imagenes(
+                         imagen_id INT AUTO_INCREMENT PRIMARY KEY,
+                         evento_id  INT,
+                         ruta_imagen VARCHAR(255) NOT NULL,
+                         hora_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                         FOREIGN KEY (evento_id) REFERENCES eventos(evento_id) ON DELETE CASCADE,
+                         INDEX idx_hora_subida (hora_subida),
+                         INDEX idx_evento_id (evento_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla de detecciones
-CREATE TABLE detections (
-                            detection_id INT AUTO_INCREMENT PRIMARY KEY,
-                            image_id INT,
-                            detection_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- cada deteccion pertenece a una imagen
+-- una imagen tiene muchas detecciones
+CREATE TABLE detecciones(
+                            deteccion_id INT AUTO_INCREMENT PRIMARY KEY,
+                            imagen_id INT,
                             confianza FLOAT NOT NULL,
                             x1 INT NOT NULL,
                             y1 INT NOT NULL,
                             x2 INT NOT NULL,
                             y2 INT NOT NULL,
-                            FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE,
-                            INDEX idx_detection_time (detection_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Tabla de confirmaciones
-CREATE TABLE confirmations (
-                               confirmation_id INT AUTO_INCREMENT PRIMARY KEY,
-                               image_id INT,
-                               user_id INT,
-                               confirmation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                               status ENUM('confirmed', 'rejected') NOT NULL,
-                               FOREIGN KEY (image_id) REFERENCES images(image_id) ON DELETE CASCADE,
-                               FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-                               INDEX idx_confirmation_time (confirmation_time)
+                            FOREIGN KEY (imagen_id) REFERENCES imagenes(imagen_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- tabla de calidad del aire
-CREATE TABLE air_quality (
-                             record_id INT AUTO_INCREMENT PRIMARY KEY,
-                             measurement_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+-- cada evento tiene un registro de calidad de aire antes, uno durante y uno despues del evento
+CREATE TABLE calidad_aire(
+                             registro_id INT AUTO_INCREMENT PRIMARY KEY,
+                             evento_id INT,
+                             hora_medicion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                              pm25 FLOAT NOT NULL,
                              pm10 FLOAT NOT NULL,
                              pm01 FLOAT NOT NULL,
-                             INDEX idx_measurement_time (measurement_time)
+                             tipo ENUM('antes', 'durante', 'despues', 'pendiente') default 'pendiente', -- asignado por sistema al detectar un evento
+                             FOREIGN KEY (evento_id) REFERENCES eventos(evento_id) ON DELETE CASCADE,
+                             INDEX idx_hora_medicion (hora_medicion),
+                             INDEX idx_evento_id (evento_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- tabla de logs del sitema
+CREATE TABLE logs_sistema(
+                             log_id INT AUTO_INCREMENT PRIMARY KEY,
+                             tipo ENUM('info', 'advertencia', 'error') default 'info',
+                             mensaje TEXT NOT NULL,
+                             hora_log TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                             INDEX idx_hora_log (hora_log)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

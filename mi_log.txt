@@ -1,0 +1,65 @@
+INFO:     Will watch for changes in these directories: ['/Users/gabriellizardi/home/tt fumadores/thermal-server']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [7372] using WatchFiles
+Form data requires "python-multipart" to be installed. 
+You can install "python-multipart" with: 
+
+pip install python-multipart
+
+Process SpawnProcess-1:
+Traceback (most recent call last):
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 67, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/uvicorn/_compat.py", line 53, in asyncio_run
+    return loop.run_until_complete(main)
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 71, in serve
+    await self._serve(sockets)
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 78, in _serve
+    config.load()
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/uvicorn/config.py", line 438, in load
+    self.loaded_app = import_from_string(self.app)
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py", line 127, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1030, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1007, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 680, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 850, in exec_module
+  File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/app/main.py", line 4, in <module>
+    from app.publicEndpoints import router as public_router
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/app/publicEndpoints.py", line 13, in <module>
+    async def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/routing.py", line 1072, in decorator
+    self.add_api_route(
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/routing.py", line 1011, in add_api_route
+    route = route_class(
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/routing.py", line 632, in __init__
+    self.dependant = get_dependant(path=self.path_format, call=self.endpoint)
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/dependencies/utils.py", line 304, in get_dependant
+    sub_dependant = get_param_sub_dependant(
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/dependencies/utils.py", line 136, in get_param_sub_dependant
+    return get_sub_dependant(
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/dependencies/utils.py", line 172, in get_sub_dependant
+    sub_dependant = get_dependant(
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/dependencies/utils.py", line 297, in get_dependant
+    param_details = analyze_param(
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/dependencies/utils.py", line 516, in analyze_param
+    ensure_multipart_is_installed()
+  File "/Users/gabriellizardi/home/tt fumadores/thermal-server/.venv/lib/python3.9/site-packages/fastapi/dependencies/utils.py", line 125, in ensure_multipart_is_installed
+    raise RuntimeError(multipart_not_installed_error) from None
+RuntimeError: Form data requires "python-multipart" to be installed. 
+You can install "python-multipart" with: 
+
+pip install python-multipart
+
+INFO:     Stopping reloader process [7372]
