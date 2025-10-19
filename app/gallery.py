@@ -36,7 +36,7 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
             # Lógica para procesar y calcular los datos de cada evento.
 
             # Imagen de vista previa (la primera del evento).
-            preview_image_url = "https://via.placeholder.com/400x200.png?text=No+Image"
+            preview_image_url = "https://placehold.co/600x400?text=No+Image"
             if evento.imagenes:
                 preview_image_url = evento.imagenes[0].ruta_imagen
 
