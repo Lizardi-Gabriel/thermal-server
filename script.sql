@@ -84,3 +84,13 @@ CREATE TABLE logs_sistema(
                              INDEX idx_hora_log (hora_log)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+
+-- registrar usuario: password= password
+INSERT INTO usuarios (nombre_usuario, correo_electronico, hash_contrasena, rol)
+VALUES ('userweb', 'user@web.com', '$2b$12$alKQXNqjAyk2LEYdNsX.DevOQIbCO5hPGVAJmwstADFfKs6Cwtx2m', 'operador');
+
+
+-- borrar un registro de eventos:
+-- DELETE FROM eventos WHERE evento_id = 1;
+
