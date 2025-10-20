@@ -13,7 +13,7 @@ from app.database import get_db
 # TODO: Cambiar estos valores por variables de entorno en producción
 SECRET_KEY = "supersecreto"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 10000
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
