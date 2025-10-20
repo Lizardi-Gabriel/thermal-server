@@ -57,7 +57,7 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                 hora_inicio_str = evento.imagenes[0].hora_subida.strftime("%H:%M:%S")
 
             hora_fin_str = ""
-            if evento.estatus.value != 'pendiente' and len(evento.imagenes) > 0:
+            if len(evento.imagenes) > 0:
                 hora_fin_str = f"""
                     <div class="flex items-center text-sm text-gray-300">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -71,6 +71,8 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                 max_detecciones = max((len(img.detecciones) for img in evento.imagenes), default=0)
 
             descripcion = evento.descripcion or "Sin descripcion disponible."
+
+            numero_evento = evento.evento_id
 
             # Construir HTML para cada tarjeta
             cards_html += f"""
@@ -99,6 +101,10 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                         
                         <div>
                             <p class="text-sm text-gray-400 leading-relaxed">{descripcion}</p>
+                        </div>
+                        
+                        <div class="mt-4 text-sm text-gray-500">
+                            <span>Número de evento: {numero_evento}</span>
                         </div>
                     </div>
                 </div>
