@@ -52,3 +52,18 @@ def crear_usuario(user: schemas.UsuarioCreate, db: Session = Depends(get_db)):
 def crear_evento(evento: schemas.EventoCreate, db: Session = Depends(get_db)):
     """ Crea un nuevo evento. Requiere autenticación. """
     return crud.create_evento(db=db, evento=evento)
+
+
+# ENDPOINTS DE LOGS
+
+@router.get("/logs", response_model=list[schemas.LogSistema])
+def listar_logs(db: Session = Depends(get_db)):
+    """ Obtiene una lista de logs del sistema con paginación. """
+    return crud.get_logs(db=db)
+
+
+@router.post("/logs", response_model=schemas.LogSistema, status_code=status.HTTP_201_CREATED)
+def crear_log(log: schemas.LogSistemaCreate, db: Session = Depends(get_db)):
+    """ Crea un nuevo log del sistema. """
+    return crud.create_log(db=db, log=log)
+

@@ -110,3 +110,5 @@ def actualizar_tipo_de_medicion( registro_id: int, nuevo_tipo: schemas.TipoMedic
         )
 
     return db_registro
+
+

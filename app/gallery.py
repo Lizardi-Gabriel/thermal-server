@@ -31,13 +31,28 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
         for evento in eventos:
             contador += 1
             # Obtener todas las URLs de las imagenes del evento
-            imagenes_urls = [img.ruta_imagen for img in evento.imagenes] if evento.imagenes else []
-            imagenes_json = json.dumps(imagenes_urls)
+
+            imagenes_con_detecciones = []
+            if evento.imagenes:
+                for img in evento.imagenes:
+                    detecciones_data = [
+                        {'x_min': d.x1, 'y_min': d.y1, 'x_max': d.x2, 'y_max': d.y2}
+                        for d in img.detecciones
+                    ]
+                    imagenes_con_detecciones.append({
+                        'url': img.ruta_imagen,
+                        'detections': detecciones_data
+                    })
+            imagenes_json = json.dumps(imagenes_con_detecciones)
 
             # Imagen de vista previa (la primera del evento)
             preview_image_url = "https://placehold.co/600x400?text=No+Image"
+
             if evento.imagenes:
-                preview_image_url = evento.imagenes[0].ruta_imagen
+                # preview_image_url = evento.imagenes[0].ruta_imagen
+                # usar la imagen con mayor numero de detecciones como preview
+                preview_image = max(evento.imagenes, key=lambda img: len(img.detecciones))
+                preview_image_url = preview_image.ruta_imagen
 
             # Mapear estado del evento a colores de Tailwind CSS
             status_map = {
@@ -159,7 +174,7 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                     </button>
                     <div class="text-center">
-                        <img id="modalImage" src="" alt="Imagen ampliada" class="max-w-[90vw] max-h-[80vh] rounded-lg mx-auto">
+                        <canvas id="modalCanvas" class="max-w-[90vw] max-h-[80vh] rounded-lg mx-auto"></canvas>
                         <p id="imageCounter" class="text-gray-300 mt-3 text-sm"></p>
                     </div>
                     <button id="nextBtn" onclick="nextImage()" class="absolute right-2 z-10 bg-gray-800 hover:bg-gray-700 text-white rounded-full p-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -172,7 +187,7 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
         <script>
             const datePicker = document.getElementById('date-picker');
             const modal = document.getElementById('imageModal');
-            const modalImg = document.getElementById('modalImage');
+            const modalCanvas = document.getElementById('modalCanvas');
             const imageCounter = document.getElementById('imageCounter');
             const prevBtn = document.getElementById('prevBtn');
             const nextBtn = document.getElementById('nextBtn');
@@ -192,13 +207,57 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                 showImage();
                 modal.classList.remove('hidden');
             }}
-
+            
             function showImage() {{
-                modalImg.src = currentImages[currentIndex];
+                if (currentImages.length === 0) return;
+            
+                // 1. Obtener datos de la imagen actual (URL y detecciones)
+                const imageData = currentImages[currentIndex];
+                const detections = imageData.detections || [];
+            
+                // 2. Preparar el canvas
+                const ctx = modalCanvas.getContext('2d');
+            
+                // 3. Cargar la nueva imagen
+                const img = new Image();
+                img.src = imageData.url;
+            
+                // 4. Cuando la imagen esté cargada, dibujarla en el canvas
+                img.onload = () => {{
+                                   // Ajustar el tamaño del canvas a las dimensiones reales de la imagen
+                modalCanvas.width = img.naturalWidth;
+                modalCanvas.height = img.naturalHeight;
+            
+                // Dibujar la imagen de fondo
+                ctx.drawImage(img, 0, 0);
+            
+                // Dibujar cada una de las detecciones sobre la imagen
+                detections.forEach(det => {{
+                // Calcular ancho y alto del rectángulo
+                const width = det.x_max - det.x_min;
+                const height = det.y_max - det.y_min;
+            
+                // Configurar el estilo del rectángulo (color, grosor)
+                ctx.strokeStyle = '#01FF01'; // Color rojo vivo
+                ctx.lineWidth = 2;
+            
+                // Dibujar el rectángulo
+                ctx.strokeRect(det.x_min, det.y_min, width, height);
+            
+                ctx.fillStyle = '#FF0000';
+                ctx.font = 'bold 18px Arial';
+                // Coloca el texto un poco arriba del cuadro
+                ctx.fillText('', det.x_min, det.y_min - 10);
+                }});
+                }};
+            
+                // Actualizar contador y botones (como antes)
                 imageCounter.textContent = `Imagen ${{currentIndex + 1}} de ${{currentImages.length}}`;
                 prevBtn.disabled = currentIndex === 0;
                 nextBtn.disabled = currentIndex === currentImages.length - 1;
             }}
+
+            
 
             function previousImage() {{ if (currentIndex > 0) {{ currentIndex--; showImage(); }} }}
             function nextImage() {{ if (currentIndex < currentImages.length - 1) {{ currentIndex++; showImage(); }} }}
