@@ -112,3 +112,7 @@ def actualizar_tipo_de_medicion( registro_id: int, nuevo_tipo: schemas.TipoMedic
     return db_registro
 
 
+@router.post("/logs", response_model=schemas.LogSistema, status_code=status.HTTP_201_CREATED)
+def crear_log(log: schemas.LogSistemaCreate, db: Session = Depends(get_db)):
+    """ Crea un nuevo log del sistema. """
+    return crud.create_log(db=db, log=log)

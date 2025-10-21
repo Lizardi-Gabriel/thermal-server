@@ -62,8 +62,5 @@ def listar_logs(db: Session = Depends(get_db)):
     return crud.get_logs(db=db)
 
 
-@router.post("/logs", response_model=schemas.LogSistema, status_code=status.HTTP_201_CREATED)
-def crear_log(log: schemas.LogSistemaCreate, db: Session = Depends(get_db)):
-    """ Crea un nuevo log del sistema. """
-    return crud.create_log(db=db, log=log)
+
 
