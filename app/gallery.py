@@ -6,6 +6,7 @@ from app.database import get_db
 from datetime import date
 from typing import Optional
 import json
+from zoneinfo import ZoneInfo
 
 router = APIRouter()
 
@@ -33,7 +34,9 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
             </div>
         """
     else:
+        contador = 0
         for evento in eventos:
+            contador += 1
             # Obtener todas las URLs de las imagenes del evento
             imagenes_urls = [img.ruta_imagen for img in evento.imagenes] if evento.imagenes else []
             imagenes_json = json.dumps(imagenes_urls)
@@ -53,17 +56,19 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
 
             # Obtener horas de inicio y fin del evento
             hora_inicio_str = "--:--"
-            if evento.imagenes:
-                hora_inicio_str = evento.imagenes[0].hora_subida.strftime("%H:%M:%S")
+            hora_fin_str = "--:--"
 
-            hora_fin_str = ""
-            if len(evento.imagenes) > 0:
-                hora_fin_str = f"""
-                    <div class="flex items-center text-sm text-gray-300">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        <span>Fin: {evento.imagenes[-1].hora_subida.strftime("%H:%M:%S")}</span>
-                    </div>
-                """
+            if evento.imagenes:
+                horaSubidaNaive = evento.imagenes[0].hora_subida
+                horaSubidaUtc = horaSubidaNaive.replace(tzinfo=ZoneInfo("UTC"))
+                zonaHorariaMexico = ZoneInfo("America/Mexico_City")
+                horaSubidaMexico = horaSubidaUtc.astimezone(zonaHorariaMexico)
+                hora_inicio_str = horaSubidaMexico.strftime("%H:%M:%S")
+
+                horaFinNaive = evento.imagenes[-1].hora_subida
+                horaFinUtc = horaFinNaive.replace(tzinfo=ZoneInfo("UTC"))
+                horaFinMexico = horaFinUtc.astimezone(zonaHorariaMexico)
+                hora_fin_str = horaFinMexico.strftime("%H:%M:%S")
 
             # Calcular numero maximo de detecciones (fumadores) en una sola imagen del evento
             max_detecciones = 0
@@ -90,7 +95,12 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 <span>Inicio: {hora_inicio_str}</span>
                            </div>
-                           {hora_fin_str}
+                           
+                           <div class="flex items-center text-sm text-gray-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <span>Fin: {hora_fin_str}</span>
+                        </div>
+                           
                         </div>
                         
                         <div class="flex items-center text-gray-300 mb-4">
@@ -103,8 +113,19 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                             <p class="text-sm text-gray-400 leading-relaxed">{descripcion}</p>
                         </div>
                         
-                        <div class="mt-4 text-sm text-gray-500">
-                            <span>Número de evento: {numero_evento}</span>
+                        
+                        <div class="flex justify-between items-center mb-3">
+                            <div class="mt-4 text-sm text-gray-500">
+                                <span>Evento del día número: {contador}</span>
+                            </div>
+                            
+                            <div class="mt-4 text-sm text-gray-500">
+                                <button onclick="deleteEvent({numero_evento})" 
+                                    class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50">
+                                Borrar
+                            </button>
+                            </div>
+                            
                         </div>
                     </div>
                 </div>
