@@ -13,23 +13,16 @@ router = APIRouter()
 
 @router.get("/gallery", response_class=HTMLResponse)
 def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date] = Query(default=None)):
-    """
-    Genera y devuelve una pagina web HTML responsiva con Tailwind CSS, optimizada para moviles.
-    Muestra los eventos para una fecha seleccionada, con una tarjeta para cada evento.
-    Por defecto, muestra los eventos de la fecha actual.
-    """
 
-    # Obtener fecha objetivo
     target_date = fecha if fecha else date.today()
 
-    # Obtener eventos de la base de datos
     eventos = crud.get_eventos_por_fecha(db=db, fecha_evento=target_date)
 
     # Construir dinamicamente las tarjetas de evento
     cards_html = ""
     if not eventos:
         cards_html = """
-            <div class="text-center text-gray-400 mt-10">
+            <div class="col-span-1 md:col-span-2 lg:col-span-3 text-center text-gray-400 mt-10">
                 <p class="text-lg">No se encontraron eventos para esta fecha.</p>
             </div>
         """
@@ -59,32 +52,26 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
             hora_fin_str = "--:--"
 
             if evento.imagenes:
-                horaSubidaNaive = evento.imagenes[0].hora_subida
-                horaSubidaUtc = horaSubidaNaive.replace(tzinfo=ZoneInfo("UTC"))
-                zonaHorariaMexico = ZoneInfo("America/Mexico_City")
-                horaSubidaMexico = horaSubidaUtc.astimezone(zonaHorariaMexico)
-                hora_inicio_str = horaSubidaMexico.strftime("%H:%M:%S")
+                hora_inicio_naive = evento.imagenes[0].hora_subida
+                hora_fin_naive = evento.imagenes[-1].hora_subida
 
-                horaFinNaive = evento.imagenes[-1].hora_subida
-                horaFinUtc = horaFinNaive.replace(tzinfo=ZoneInfo("UTC"))
-                horaFinMexico = horaFinUtc.astimezone(zonaHorariaMexico)
-                hora_fin_str = horaFinMexico.strftime("%H:%M:%S")
+                # Convertir a la zona horaria de la Ciudad de Mexico
+                zona_horaria_mexico = ZoneInfo("America/Mexico_City")
+                hora_inicio_mexico = hora_inicio_naive.replace(tzinfo=ZoneInfo("UTC")).astimezone(zona_horaria_mexico)
+                hora_fin_mexico = hora_fin_naive.replace(tzinfo=ZoneInfo("UTC")).astimezone(zona_horaria_mexico)
 
-            # Calcular numero maximo de detecciones (fumadores) en una sola imagen del evento
-            max_detecciones = 0
-            if evento.imagenes:
-                max_detecciones = max((len(img.detecciones) for img in evento.imagenes), default=0)
+                hora_inicio_str = hora_inicio_mexico.strftime("%H:%M:%S")
+                hora_fin_str = hora_fin_mexico.strftime("%H:%M:%S")
 
+            max_detecciones = max((len(img.detecciones) for img in evento.imagenes), default=0) if evento.imagenes else 0
             descripcion = evento.descripcion or "Sin descripcion disponible."
-
             numero_evento = evento.evento_id
 
-            # Construir HTML para cada tarjeta
             cards_html += f"""
-                <div class="bg-gray-800 rounded-lg overflow-hidden shadow-2xl">
+                <div class="bg-gray-800 rounded-lg overflow-hidden shadow-2xl flex flex-col">
                     <img src="{preview_image_url}" alt="Vista previa del evento" class="w-full h-48 object-cover cursor-pointer" onclick='openModal({imagenes_json})'>
                     
-                    <div class="p-4">
+                    <div class="p-4 flex flex-col flex-grow">
                         <div class="flex justify-between items-center mb-2">
                             <p class="text-sm text-gray-400">{evento.fecha_evento.strftime("%d/%m/%Y")}</p>
                             <span class="px-3 py-1 text-xs font-semibold text-white {status_color} rounded-full">{status_text}</span>
@@ -95,12 +82,10 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 <span>Inicio: {hora_inicio_str}</span>
                            </div>
-                           
                            <div class="flex items-center text-sm text-gray-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 <span>Fin: {hora_fin_str}</span>
-                        </div>
-                           
+                           </div>
                         </div>
                         
                         <div class="flex items-center text-gray-300 mb-4">
@@ -109,23 +94,20 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
                             <span class="text-sm ml-1">(max. detectados)</span>
                         </div>
                         
-                        <div>
+                        <div class="flex-grow">
                             <p class="text-sm text-gray-400 leading-relaxed">{descripcion}</p>
                         </div>
                         
-                        
-                        <div class="flex justify-between items-center mb-3">
-                            <div class="mt-4 text-sm text-gray-500">
-                                <span>Evento del día número: {contador}</span>
+                        <div class="flex justify-between items-center mt-4 pt-4 border-t border-gray-700">
+                            <div class="text-sm text-gray-500">
+                                <span>Evento del dia: {contador}</span>
                             </div>
-                            
-                            <div class="mt-4 text-sm text-gray-500">
-                                <button onclick="deleteEvent({numero_evento})" 
+                            <div class="text-sm text-gray-500">
+                                <button onclick="deleteEvent({numero_evento}, this)" 
                                     class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50">
                                 Borrar
-                            </button>
+                                </button>
                             </div>
-                            
                         </div>
                     </div>
                 </div>
@@ -142,22 +124,27 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
             body {{ background-color: #111827; }}
+            /* Animacion de desvanecimiento para borrar tarjetas */
+            .fade-out {{
+                transition: opacity 0.5s ease-out;
+                opacity: 0;
+            }}
         </style>
     </head>
     <body class="text-white">
-        <div class="max-w-md mx-auto p-4">
+        <div class="container mx-auto p-4 sm:p-6 lg:p-8">
             <header class="text-center my-6">
                 <h1 class="text-3xl font-bold tracking-tight">Galeria de Eventos</h1>
                 <p class="text-gray-400">Monitorizacion de actividad</p>
             </header>
 
-            <form id="dateForm" class="mb-8">
+            <form id="dateForm" class="mb-8 max-w-sm mx-auto">
                 <label for="date-picker" class="block text-sm font-medium text-gray-300 mb-2">Seleccionar fecha:</label>
                 <input type="date" id="date-picker" name="fecha" value="{target_date.strftime('%Y-%m-%d')}" 
                        class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
             </form>
 
-            <div id="gallery-container" class="space-y-6">
+            <div id="gallery-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {cards_html}
             </div>
         </div>
@@ -165,27 +152,18 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
         <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50 hidden" onclick="closeModalOnBackground(event)">
             <div class="relative max-w-5xl w-full" onclick="event.stopPropagation()">
                 <button onclick="closeModal()" class="absolute top-2 right-2 z-10 bg-gray-800 hover:bg-gray-700 text-white rounded-full p-2 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
-                
                 <div class="relative flex items-center justify-center">
                     <button id="prevBtn" onclick="previousImage()" class="absolute left-2 z-10 bg-gray-800 hover:bg-gray-700 text-white rounded-full p-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                     </button>
-                    
                     <div class="text-center">
                         <img id="modalImage" src="" alt="Imagen ampliada" class="max-w-[90vw] max-h-[80vh] rounded-lg mx-auto">
                         <p id="imageCounter" class="text-gray-300 mt-3 text-sm"></p>
                     </div>
-                    
                     <button id="nextBtn" onclick="nextImage()" class="absolute right-2 z-10 bg-gray-800 hover:bg-gray-700 text-white rounded-full p-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                     </button>
                 </div>
             </div>
@@ -202,12 +180,13 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
             let currentImages = [];
             let currentIndex = 0;
 
-            // Recargar la pagina con la nueva fecha al cambiar el selector
             datePicker.addEventListener('change', function() {{
                 window.location.href = `/gallery?fecha=${{this.value}}`;
             }});
 
+            // Funciones del Modal
             function openModal(images) {{
+                if (!images || images.length === 0) return;
                 currentImages = images;
                 currentIndex = 0;
                 showImage();
@@ -215,57 +194,51 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
             }}
 
             function showImage() {{
-                if (currentImages.length === 0) return;
-                
                 modalImg.src = currentImages[currentIndex];
                 imageCounter.textContent = `Imagen ${{currentIndex + 1}} de ${{currentImages.length}}`;
-                
-                // Actualizar estado de botones
                 prevBtn.disabled = currentIndex === 0;
                 nextBtn.disabled = currentIndex === currentImages.length - 1;
             }}
 
-            function previousImage() {{
-                if (currentIndex > 0) {{
-                    currentIndex--;
-                    showImage();
-                }}
-            }}
+            function previousImage() {{ if (currentIndex > 0) {{ currentIndex--; showImage(); }} }}
+            function nextImage() {{ if (currentIndex < currentImages.length - 1) {{ currentIndex++; showImage(); }} }}
+            function closeModal() {{ modal.classList.add('hidden'); }}
+            function closeModalOnBackground(event) {{ if (event.target === modal) closeModal(); }}
 
-            function nextImage() {{
-                if (currentIndex < currentImages.length - 1) {{
-                    currentIndex++;
-                    showImage();
-                }}
-            }}
-
-            function closeModal() {{
-                modal.classList.add('hidden');
-                currentImages = [];
-                currentIndex = 0;
-            }}
-
-            function closeModalOnBackground(event) {{
-                if (event.target === modal) {{
-                    closeModal();
+            // Funcion para borrar evento (Ejemplo)
+            function deleteEvent(eventId, buttonElement) {{
+                if (confirm(`¿Estas seguro de que quieres borrar el evento #${{eventId}}?`)) {{
+                    // logica de llamada a la API:
+                    // fetch(`/events/${{eventId}}`, {{ method: 'DELETE' }})
+                    // .then(response => {{
+                    //     if (response.ok) {{
+                    //         console.log('Evento borrado');
+                    //         // Eliminar la tarjeta del DOM
+                    //         const card = buttonElement.closest('.bg-gray-800');
+                    //         card.classList.add('fade-out');
+                    //         setTimeout(() => card.remove(), 500);
+                    //     }} else {{
+                    //         alert('Error al borrar el evento.');
+                    //     }}
+                    // }});
+                    
+                    // Simulacion:
+                    console.log(`Borrando evento con ID: ${{eventId}}`);
+                    const card = buttonElement.closest('.bg-gray-800');
+                    card.classList.add('fade-out');
+                    setTimeout(() => card.remove(), 500);
                 }}
             }}
             
-            // Cerrar modal con la tecla Escape
+            // Navegacion del Modal con teclado
             document.addEventListener('keydown', function(event) {{
-                if (!modal.classList.contains('hidden')) {{
-                    if (event.key === 'Escape') {{
-                        closeModal();
-                    }} else if (event.key === 'ArrowLeft') {{
-                        previousImage();
-                    }} else if (event.key === 'ArrowRight') {{
-                        nextImage();
-                    }}
-                }}
+                if (modal.classList.contains('hidden')) return;
+                if (event.key === 'Escape') closeModal();
+                if (event.key === 'ArrowLeft') previousImage();
+                if (event.key === 'ArrowRight') nextImage();
             }});
         </script>
     </body>
     </html>
     """
-
     return HTMLResponse(content=html_content)
