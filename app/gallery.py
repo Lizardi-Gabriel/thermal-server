@@ -301,3 +301,60 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
     </html>
     """
     return HTMLResponse(content=html_content)
+
+
+# mostrar pretty logs de sistema
+@router.get("/historial", response_class=HTMLResponse)
+def mostrar_historial_logs(db: Session = Depends(get_db)):
+    logs = crud.get_logs(db=db)
+
+    logs_html = ""
+    if not logs:
+        logs_html = """
+            <div class="col-span-1 text-center text-gray-400 mt-10">
+                <p class="text-lg">No se encontraron logs del sistema.</p>
+            </div>
+        """
+    else:
+        for log in logs:
+            zona_horaria_mexico = ZoneInfo("America/Mexico_City")
+            hora_inicio_mexico = log.hora_log.replace(tzinfo=ZoneInfo("UTC")).astimezone(zona_horaria_mexico)
+            hora_inicio_str = hora_inicio_mexico.strftime("%H:%M:%S")
+
+            logs_html += f"""
+                <div class="bg-gray-800 rounded-lg p-4 mb-4 shadow-md">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-400">{hora_inicio_str}</span>
+                        <span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">{log.tipo}</span>
+                    </div>
+                    <p class="text-gray-300">{log.mensaje}</p>
+                </div>
+            """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Historial de Logs del Sistema</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            body {{ background-color: #111827; }}
+        </style>
+    </head>
+    <body class="text-white">
+        <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+            <header class="text-center my-6">
+                <h1 class="text-3xl font-bold tracking-tight">Historial de Logs del Sistema</h1>
+                <p class="text-gray-400">Registros detallados de actividades y eventos</p>
+            </header>
+
+            <div id="logs-container" class="max-w-4xl mx-auto">
+                {logs_html}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
