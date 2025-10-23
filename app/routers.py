@@ -77,8 +77,8 @@ def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecc
         raise HTTPException(status_code=404, detail="Evento no encontrado.")
 
     # obtenemos registros de aire con la api de aire
-    from aire import consumir_api_aire
-    datos_aire = consumir_api_aire()
+    import aire
+    datos_aire = aire.consumir_api_aire()
 
     if datos_aire.descrip != "error":
         # Creamos un nuevo registro de calidad del aire asociado al evento
