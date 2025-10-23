@@ -96,6 +96,11 @@ def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecc
         )
         crud.create_calidad_aire(db, registro=calidad_aire_data)
 
+        crud.create_log(db, log=schemas.LogSistemaCreate(
+            nivel="INFO",
+            mensaje=f"Se agrega imagen y detecciones, evento: {evento_id}, calidad de aire: {calidad_aire_data}"
+        ))
+
     return crud.create_imagen_con_detecciones(db, evento_id=evento_id, imagen=data.imagen, detecciones=data.detecciones)
 
 
