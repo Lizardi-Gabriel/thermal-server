@@ -81,7 +81,7 @@ def consumir_api_aire() -> CalidadAireBase:
 
                         schemaCalidadAire = CalidadAireBase(**datosParaSchema)
 
-                        print(schemaCalidadAire.model_dump_json(indent=4))
+                       #  print(schemaCalidadAire.model_dump_json(indent=4))
 
                         return schemaCalidadAire
 
