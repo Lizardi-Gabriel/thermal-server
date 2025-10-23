@@ -6,7 +6,7 @@ import os
 from pydantic import BaseModel
 from enum import Enum
 
-from schemas import CalidadAireBase
+from app.schemas import CalidadAireBase
 
 
 def retornar_error_general(mensaje: str) -> CalidadAireBase:
