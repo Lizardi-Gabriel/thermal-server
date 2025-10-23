@@ -7,6 +7,7 @@ from app import crud, schemas, models, security
 from app.database import get_db
 from datetime import date
 
+from aire import consumir_api_aire
 
 router = APIRouter(
     dependencies=[Depends(security.get_current_user)]
@@ -76,9 +77,7 @@ def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecc
     if not crud.get_evento_by_id(db, evento_id):
         raise HTTPException(status_code=404, detail="Evento no encontrado.")
 
-    # obtenemos registros de aire con la api de aire
-    import aire
-    datos_aire = aire.consumir_api_aire()
+    datos_aire = consumir_api_aire()
 
     if datos_aire.descrip != "error":
         # Creamos un nuevo registro de calidad del aire asociado al evento
@@ -91,7 +90,7 @@ def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecc
             pm10=datos_aire.pm10,
             aqi=datos_aire.aqi,
             descrip=datos_aire.descrip,
-            hota_medicion=datos_aire.hora_medicion,
+            hora_medicion=datos_aire.hora_medicion,
             tipo=schemas.TipoMedicionEnum.durante
         )
         crud.create_calidad_aire(db, registro=calidad_aire_data)
