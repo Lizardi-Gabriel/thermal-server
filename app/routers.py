@@ -7,7 +7,7 @@ from app import crud, schemas, models, security
 from app.database import get_db
 from datetime import date
 
-from aire import consumir_api_aire
+from app.aire import consumir_api_aire
 
 router = APIRouter(
     dependencies=[Depends(security.get_current_user)]
