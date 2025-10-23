@@ -76,6 +76,26 @@ def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecc
     if not crud.get_evento_by_id(db, evento_id):
         raise HTTPException(status_code=404, detail="Evento no encontrado.")
 
+    # obtenemos registros de aire con la api de aire
+    from aire import consumir_api_aire
+    datos_aire = consumir_api_aire()
+
+    if datos_aire.descrip != "error":
+        # Creamos un nuevo registro de calidad del aire asociado al evento
+        calidad_aire_data = schemas.CalidadAireCreate(
+            evento_id=evento_id,
+            temp=datos_aire.temp,
+            humedad=datos_aire.humedad,
+            pm1p0=datos_aire.pm1p0,
+            pm2p5=datos_aire.pm2p5,
+            pm10=datos_aire.pm10,
+            aqi=datos_aire.aqi,
+            descrip=datos_aire.descrip,
+            hota_medicion=datos_aire.hora_medicion,
+            tipo=schemas.TipoMedicionEnum.durante
+        )
+        crud.create_calidad_aire(db, registro=calidad_aire_data)
+
     return crud.create_imagen_con_detecciones(db, evento_id=evento_id, imagen=data.imagen, detecciones=data.detecciones)
 
 
@@ -91,8 +111,6 @@ def agregar_medicion_calidad_aire(evento_id: int, medicion: schemas.CalidadAireB
     medicion_data = schemas.CalidadAireCreate(evento_id=evento_id, **medicion.model_dump())
     return crud.create_calidad_aire(db, registro=medicion_data)
 
-
-# ... (resto de tus importaciones y código de router.py)
 
 @router.patch("/calidad-aire/{registro_id}/tipo", response_model=schemas.CalidadAire)
 def actualizar_tipo_de_medicion( registro_id: int, nuevo_tipo: schemas.TipoMedicionEnum, db: Session = Depends(get_db)):
@@ -111,6 +129,8 @@ def actualizar_tipo_de_medicion( registro_id: int, nuevo_tipo: schemas.TipoMedic
 
     return db_registro
 
+
+# ENDPOINTS DE LOGS
 
 @router.post("/logs", response_model=schemas.LogSistema, status_code=status.HTTP_201_CREATED)
 def crear_log(log: schemas.LogSistemaCreate, db: Session = Depends(get_db)):

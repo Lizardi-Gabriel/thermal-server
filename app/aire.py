@@ -3,10 +3,34 @@ import json
 import datetime
 from dotenv import load_dotenv
 import os
+from pydantic import BaseModel
+from enum import Enum
+
+from schemas import CalidadAireBase
 
 
-def consumir_api_aire():
+def retornar_error_general(mensaje: str) -> CalidadAireBase:
+    """
+    Retorna un objeto CalidadAireBase con valores None y un mensaje de error.
+    """
+    return CalidadAireBase(
+        temp=None,
+        humedad=None,
+        pm1p0=None,
+        pm2p5=None,
+        pm10=None,
+        aqi=None,
+        descrip=mensaje
+    )
 
+
+def consumir_api_aire() -> CalidadAireBase:
+    """
+    Consumir la API de WeatherLink y retornar un schema CalidadAireBase.
+    Retorna None si hay un error o no se encuentran datos.
+    """
+
+    # TODO: manejar errores
     load_dotenv()
 
     apikey = os.getenv("API_KEY")
@@ -25,18 +49,8 @@ def consumir_api_aire():
         respuesta.raise_for_status()
         datos = respuesta.json()
 
-        # print(f"datos en pretty json:\n{json.dumps(datos, indent=4)}")
-
-        print(f"--- Datos Generales de la Estación ---")
-        print(f"ID de Estación: {datos.get('station_id')}")
-        print(f"UUID: {datos.get('station_id_uuid')}")
-
         tsGenerado = datos.get('generated_at', 0)
         fechaGenerado = datetime.datetime.fromtimestamp(tsGenerado)
-
-        print(f"Datos generados el: {fechaGenerado}")
-
-        print("\n--- Procesando Sensores ---")
 
         for sensor in datos.get('sensors', []):
 
@@ -46,53 +60,42 @@ def consumir_api_aire():
             if lsid == 794536 or lsid == 794537:
 
                 if sensor.get('data'):
-                    datosSensor = sensor['data'][0]
-                    tsLectura = datetime.datetime.fromtimestamp(datosSensor.get('ts', 0))
 
-                    print(f"\n[Sensor LSID: {lsid} - Tipo: {tipoSensor}]")
-                    print(f"  Fecha de lectura: {tsLectura}")
+                    if tipoSensor == 323 or tipoSensor == 326:
 
-                    # Identificar qué tipo de sensor es para mostrar datos relevantes
-                    # Tipo 506 (Salud del dispositivo)
-                    if tipoSensor == 506:
-                        print(f"  Tipo: Salud del Dispositivo")
-                        print(f"  - IP: {datosSensor.get('ip_v4_address')}")
-                        print(f"  - Señal WiFi: {datosSensor.get('wifi_rssi')} dBm")
-                        print(f"  - Uptime (seg): {datosSensor.get('uptime')}")
+                        datosSensor = sensor['data'][0]
+                        tsLectura = datosSensor.get('ts', 0)
+                        horaLectura = datetime.datetime.fromtimestamp(tsLectura)
 
-                    # Tipos 323 o 326 (Ambiental)
-                    elif tipoSensor == 323 or tipoSensor == 326:
-                        print(f"  Tipo: Ambiental / Calidad de Aire")
-                        print(f"  - Temperatura: {datosSensor.get('temp')} °F")
-                        print(f"  - Humedad: {datosSensor.get('hum')} %")
-                        print(f"  - PM 01: {datosSensor.get('pm_1')}")
-                        print(f"  - PM 2.5: {datosSensor.get('pm_2p5')}")
-                        print(f"  - PM 10: {datosSensor.get('pm_10')}")
-                        print(f"  - AQI: {datosSensor.get('aqi_val')}")
-                        print(f"  - Descripción: {datosSensor.get('aqi_desc')}")
+                        datosParaSchema = {
+                            'temp': datosSensor.get('temp'),
+                            'humedad': datosSensor.get('hum'),
+                            'pm1p0': datosSensor.get('pm_1'),   # API 'pm_1' -> Schema 'pm1p0'
+                            'pm2p5': datosSensor.get('pm_2p5'), # API 'pm_2p5' -> Schema 'pm2p5'
+                            'pm10': datosSensor.get('pm_10'),  # API 'pm_10' -> Schema 'pm10'
+                            'aqi': datosSensor.get('aqi_val'),  # API 'aqi_val' -> Schema 'aqi'
+                            'descrip': datosSensor.get('aqi_desc'), # API 'aqi_desc' -> Schema 'descrip'
+                            'hora_medicion': horaLectura
 
-                    else:
-                        print(f"  Tipo: No reconocido ({tipoSensor})")
+                        }
 
-                else:
-                    print(f"\n[Sensor LSID: {lsid}] - Sin datos (lista 'data' vacía).")
+                        schemaCalidadAire = CalidadAireBase(**datosParaSchema)
+
+                        return schemaCalidadAire
+
+        return retornar_error_general("error")
 
     except requests.exceptions.HTTPError as errHttp:
-        print(f"Error HTTP: {errHttp}")
-        if errHttp.response.status_code == 401 or errHttp.response.status_code == 403:
-            print("Verifica tu API Key o Token en el 'Authorization' header.")
+        return retornar_error_general("error")
     except requests.exceptions.ConnectionError as errCon:
-        print(f"Error de Conexión: No se pudo conectar a {urlApi}")
+        return retornar_error_general("error")
     except requests.exceptions.Timeout as errTimeout:
-        print(f"Error: La solicitud a {urlApi} tardó demasiado (Timeout).")
+        return retornar_error_general("error")
     except requests.exceptions.RequestException as err:
-        print(f"Error Inesperado: {err}")
+        return retornar_error_general("error")
     except json.JSONDecodeError:
-        print("Error: La respuesta no es un JSON válido.")
+        return retornar_error_general("error")
     except KeyError as errKey:
-        print(f"Error: El JSON no tiene la estructura esperada. Falta la llave: {errKey}")
-
-
-# Ejecutar la función
-if __name__ == "__main__":
-    consumir_api_aire()
+        return retornar_error_general("error")
+    except Exception as e:
+        return retornar_error_general("error")

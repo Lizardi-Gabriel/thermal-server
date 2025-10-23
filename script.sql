@@ -65,9 +65,13 @@ CREATE TABLE calidad_aire(
                              registro_id INT AUTO_INCREMENT PRIMARY KEY,
                              evento_id INT,
                              hora_medicion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                             pm25 FLOAT NOT NULL,
-                             pm10 FLOAT NOT NULL,
-                             pm01 FLOAT NOT NULL,
+                             temp FLOAT,
+                             humedad FLOAT,
+                             pm2p5 FLOAT,
+                             pm10 FLOAT,
+                             pm1p0 FLOAT,
+                             aqi FLOAT,
+                             descrip VARCHAR(30),
                              tipo ENUM('antes', 'durante', 'despues', 'pendiente') default 'pendiente', -- asignado por sistema al detectar un evento
                              FOREIGN KEY (evento_id) REFERENCES eventos(evento_id) ON DELETE CASCADE,
                              INDEX idx_hora_medicion (hora_medicion),
@@ -94,3 +98,27 @@ VALUES ('userweb', 'user@web.com', '$2b$12$alKQXNqjAyk2LEYdNsX.DevOQIbCO5hPGVAJm
 -- borrar un registro de eventos:
 -- DELETE FROM eventos WHERE evento_id = 1;
 
+
+
+
+
+
+/*
+-- ejecucion modificar calidad del aire:
+
+ALTER TABLE calidad_aire
+    -- Renombrar pm25 a pm2p5 y quitar NOT NULL
+    CHANGE COLUMN pm25 pm2p5 FLOAT,
+
+    -- Modificar pm10 para quitar NOT NULL
+    MODIFY COLUMN pm10 FLOAT,
+
+    -- Renombrar pm01 a pm1p0 y quitar NOT NULL
+    CHANGE COLUMN pm01 pm1p0 FLOAT,
+
+    -- Agregar las nuevas columnas (que seran nulables por defecto)
+    ADD COLUMN temp FLOAT AFTER hora_medicion,
+    ADD COLUMN humedad FLOAT AFTER temp,
+    ADD COLUMN aqi FLOAT AFTER pm1p0,
+    ADD COLUMN descrip VARCHAR(30) AFTER aqi;
+*/

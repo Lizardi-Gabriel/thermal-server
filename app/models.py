@@ -111,20 +111,20 @@ class Deteccion(Base):
 
 
 class CalidadAire(Base):
-    """Modelo para la tabla 'calidad_aire'"""
+    """Modelo actualizado para la tabla 'calidad_aire'"""
     __tablename__ = "calidad_aire"
 
     registro_id = Column(Integer, primary_key=True, autoincrement=True)
-    hora_medicion = Column(DateTime, default=func.now(), index=True)
-    pm25 = Column(Float, nullable=False)
-    pm10 = Column(Float, nullable=False)
-    pm01 = Column(Float, nullable=False)
-    tipo = Column(SQLAlchemyEnum(TipoMedicionEnum), default=TipoMedicionEnum.pendiente)
-
-    # Llave foránea que conecta con la tabla de eventos.
     evento_id = Column(Integer, ForeignKey("eventos.evento_id", ondelete="CASCADE"), index=True)
-
-    # Relación: Un registro de calidad de aire pertenece a un evento.
+    hora_medicion = Column(DateTime, default=func.now(), index=True)
+    temp = Column(Float)
+    humedad = Column(Float)
+    pm2p5 = Column(Float) # antes pm25
+    pm10 = Column(Float)  # antes pm10
+    pm1p0 = Column(Float) # antes pm01
+    aqi = Column(Float)
+    descrip = Column(String(30))
+    tipo = Column(SQLAlchemyEnum(TipoMedicionEnum), default=TipoMedicionEnum.pendiente)
     evento = relationship("Evento", back_populates="registros_calidad_aire")
 
 

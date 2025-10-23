@@ -80,10 +80,16 @@ class Imagen(ImagenBase):
 
 class CalidadAireBase(BaseModel):
     """Schema base para un registro de calidad del aire."""
-    pm25: float
+
+    temp: float
+    humedad: float
+    pm2p5: float
     pm10: float
-    pm01: float
+    pm1p0: float
+    aqi: float
+    descrip: str
     tipo: TipoMedicionEnum = TipoMedicionEnum.pendiente
+    hora_medicion: Optional[datetime] = None
 
 
 class CalidadAireCreate(CalidadAireBase):
@@ -95,7 +101,6 @@ class CalidadAire(CalidadAireBase):
     """Schema para leer un registro de calidad del aire."""
     registro_id: int
     evento_id: int
-    hora_medicion: datetime
 
     class Config:
         from_attributes = True
