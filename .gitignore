@@ -4,3 +4,5 @@
 .idea/dataSources.xml
 .idea/dataSources.xml
 /.venv
+/__pycache__/
+nohup.out
