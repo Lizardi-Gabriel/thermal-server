@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from typing import List, Optional, Type
+from datetime import date
 from app import models, schemas
 from app.models import LogSistema
 from app.security import hashear_password
@@ -191,7 +192,14 @@ def create_log(db: Session, log: schemas.LogSistemaCreate) -> models.LogSistema:
     return db_log
 
 
-def get_logs(db: Session) -> list[Type[LogSistema]]:
-    """Obtener una lista de logs del sistema con paginación."""
-    return db.query(models.LogSistema).order_by(desc(models.LogSistema.hora_log)).all()
+def get_logs(db: Session, fecha_log: Optional[date] = None, tipo_log: Optional[models.TipoLogEnum] = None) -> list[Type[LogSistema]]:
+    """Obtener una lista de logs del sistema con filtros opcionales por fecha y tipo."""
+    query = db.query(models.LogSistema)
 
+    if fecha_log:
+        query = query.filter(func.date(models.LogSistema.hora_log) == fecha_log)
+
+    if tipo_log:
+        query = query.filter(models.LogSistema.tipo == tipo_log)
+
+    return query.order_by(desc(models.LogSistema.hora_log)).all()

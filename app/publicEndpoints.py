@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, date
+from typing import Optional
 
-from app import crud, schemas, security
+from app import crud, schemas, security, models
 from app.database import get_db
 
 router = APIRouter()
@@ -57,10 +58,6 @@ def crear_evento(evento: schemas.EventoCreate, db: Session = Depends(get_db)):
 # ENDPOINTS DE LOGS
 
 @router.get("/logs", response_model=list[schemas.LogSistema])
-def listar_logs(db: Session = Depends(get_db)):
-    """ Obtiene una lista de logs del sistema con paginación. """
-    return crud.get_logs(db=db)
-
-
-
-
+def listar_logs(fecha: Optional[date] = Query(default=None), tipo: Optional[models.TipoLogEnum] = Query(default=None), db: Session = Depends(get_db)):
+    """ Obtiene una lista de logs del sistema con filtros opcionales por fecha y tipo. """
+    return crud.get_logs(db=db, fecha_log=fecha, tipo_log=tipo)

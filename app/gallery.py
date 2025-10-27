@@ -303,33 +303,86 @@ def mostrar_galeria_eventos(db: Session = Depends(get_db), fecha: Optional[date]
     return HTMLResponse(content=html_content)
 
 
-# mostrar pretty logs de sistema
+# Mostrar historial de logs del sistema con filtros
 @router.get("/historial", response_class=HTMLResponse)
-def mostrar_historial_logs(db: Session = Depends(get_db)):
-    logs = crud.get_logs(db=db)
+def mostrar_historial_logs(db: Session = Depends(get_db), fecha: Optional[date] = Query(default=None), tipo: Optional[str] = Query(default=None)):
+
+    # Convertir el tipo de string a enum si se proporciona
+    tipo_enum = None
+    if tipo and tipo != "todos":
+        try:
+            from app.models import TipoLogEnum
+            tipo_enum = TipoLogEnum(tipo)
+        except ValueError:
+            tipo_enum = None
+
+    # Obtener fecha objetivo
+    target_date = fecha if fecha else date.today()
+
+    # Obtener logs filtrados
+    logs = crud.get_logs(db=db, fecha_log=target_date, tipo_log=tipo_enum)
+
+    # Mapeo de colores por tipo de log
+    tipo_map = {
+        'info': ('bg-blue-500', 'text-blue-100', 'border-blue-400'),
+        'advertencia': ('bg-yellow-500', 'text-yellow-100', 'border-yellow-400'),
+        'error': ('bg-red-500', 'text-red-100', 'border-red-400')
+    }
 
     logs_html = ""
     if not logs:
         logs_html = """
             <div class="col-span-1 text-center text-gray-400 mt-10">
-                <p class="text-lg">No se encontraron logs del sistema.</p>
+                <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p class="text-lg mt-4">No se encontraron logs para esta fecha y filtros.</p>
             </div>
         """
     else:
         for log in logs:
             zona_horaria_mexico = ZoneInfo("America/Mexico_City")
-            hora_inicio_mexico = log.hora_log.replace(tzinfo=ZoneInfo("UTC")).astimezone(zona_horaria_mexico)
-            hora_inicio_str = hora_inicio_mexico.strftime("%H:%M:%S")
+            hora_mexico = log.hora_log.replace(tzinfo=ZoneInfo("UTC")).astimezone(zona_horaria_mexico)
+            hora_str = hora_mexico.strftime("%H:%M:%S")
+            fecha_str = hora_mexico.strftime("%d/%m/%Y")
+
+            bg_color, text_color, border_color = tipo_map.get(log.tipo.value, ('bg-gray-500', 'text-gray-100', 'border-gray-400'))
+
+            # Icono según tipo de log
+            icono = ""
+            if log.tipo.value == "info":
+                icono = """<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>"""
+            elif log.tipo.value == "advertencia":
+                icono = """<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>"""
+            else:
+                icono = """<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>"""
 
             logs_html += f"""
-                <div class="bg-gray-800 rounded-lg p-4 mb-4 shadow-md">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-sm text-gray-400">{hora_inicio_str}</span>
-                        <span class="px-2 py-1 text-xs font-semibold text-white bg-blue-500 rounded-full">{log.tipo}</span>
+                <div class="bg-gray-800 rounded-lg p-4 mb-3 shadow-lg border-l-4 {border_color} hover:shadow-xl transition-shadow duration-200">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="{bg_color} {text_color} p-2 rounded-full">
+                                {icono}
+                            </div>
+                            <div>
+                                <span class="text-sm font-semibold text-gray-300">{fecha_str}</span>
+                                <span class="text-sm text-gray-500 ml-2">{hora_str}</span>
+                            </div>
+                        </div>
+                        <span class="px-3 py-1 text-xs font-bold {text_color} {bg_color} rounded-full uppercase">{log.tipo.value}</span>
                     </div>
-                    <p class="text-gray-300">{log.mensaje}</p>
+                    <p class="text-gray-300 leading-relaxed pl-12">{log.mensaje}</p>
                 </div>
             """
+
+    # Obtener el valor del filtro actual para mantenerlo seleccionado
+    tipo_selected = tipo if tipo else "todos"
 
     html_content = f"""
     <!DOCTYPE html>
@@ -341,6 +394,9 @@ def mostrar_historial_logs(db: Session = Depends(get_db)):
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
             body {{ background-color: #111827; }}
+            .filter-transition {{
+                transition: all 0.3s ease-in-out;
+            }}
         </style>
     </head>
     <body class="text-white">
@@ -350,10 +406,84 @@ def mostrar_historial_logs(db: Session = Depends(get_db)):
                 <p class="text-gray-400">Registros detallados de actividades y eventos</p>
             </header>
 
+            <!-- Filtros -->
+            <div class="max-w-4xl mx-auto mb-8 bg-gray-800 rounded-lg p-6 shadow-xl">
+                <form id="filterForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Filtro de Fecha -->
+                    <div>
+                        <label for="date-picker" class="block text-sm font-medium text-gray-300 mb-2">
+                            <svg class="inline h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Fecha:
+                        </label>
+                        <input type="date" id="date-picker" name="fecha" value="{target_date.strftime('%Y-%m-%d')}" 
+                               class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 filter-transition hover:border-blue-400">
+                    </div>
+                    
+                    <!-- Filtro de Tipo -->
+                    <div>
+                        <label for="tipo-select" class="block text-sm font-medium text-gray-300 mb-2">
+                            <svg class="inline h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            Tipo de Log:
+                        </label>
+                        <select id="tipo-select" name="tipo" 
+                                class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 filter-transition hover:border-blue-400">
+                            <option value="todos" {"selected" if tipo_selected == "todos" else ""}>Todos</option>
+                            <option value="info" {"selected" if tipo_selected == "info" else ""}>Info</option>
+                            <option value="advertencia" {"selected" if tipo_selected == "advertencia" else ""}>Advertencia</option>
+                            <option value="error" {"selected" if tipo_selected == "error" else ""}>Error</option>
+                        </select>
+                    </div>
+                </form>
+                
+                <!-- Estadísticas rápidas -->
+                <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center p-3 bg-gray-700 rounded-lg">
+                        <p class="text-2xl font-bold text-white">{len(logs)}</p>
+                        <p class="text-xs text-gray-400">Total Logs</p>
+                    </div>
+                    <div class="text-center p-3 bg-blue-900 bg-opacity-30 rounded-lg border border-blue-500">
+                        <p class="text-2xl font-bold text-blue-400">{sum(1 for log in logs if log.tipo.value == 'info')}</p>
+                        <p class="text-xs text-gray-400">Info</p>
+                    </div>
+                    <div class="text-center p-3 bg-yellow-900 bg-opacity-30 rounded-lg border border-yellow-500">
+                        <p class="text-2xl font-bold text-yellow-400">{sum(1 for log in logs if log.tipo.value == 'advertencia')}</p>
+                        <p class="text-xs text-gray-400">Advertencias</p>
+                    </div>
+                    <div class="text-center p-3 bg-red-900 bg-opacity-30 rounded-lg border border-red-500">
+                        <p class="text-2xl font-bold text-red-400">{sum(1 for log in logs if log.tipo.value == 'error')}</p>
+                        <p class="text-xs text-gray-400">Errores</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contenedor de Logs -->
             <div id="logs-container" class="max-w-4xl mx-auto">
                 {logs_html}
             </div>
         </div>
+
+        <script>
+            const datePicker = document.getElementById('date-picker');
+            const tipoSelect = document.getElementById('tipo-select');
+            
+            function updateFilters() {{
+                const fecha = datePicker.value;
+                const tipo = tipoSelect.value;
+                const params = new URLSearchParams();
+                
+                if (fecha) params.append('fecha', fecha);
+                if (tipo && tipo !== 'todos') params.append('tipo', tipo);
+                
+                window.location.href = `/historial?${{params.toString()}}`;
+            }}
+            
+            datePicker.addEventListener('change', updateFilters);
+            tipoSelect.addEventListener('change', updateFilters);
+        </script>
     </body>
     </html>
     """
