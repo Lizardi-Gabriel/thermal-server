@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from app.routers import router as api_router
 from app.gallery import router as gallery_router
 from app.publicEndpoints import router as public_router
+from app.routers_optimizado import router as optimizado_router
+
 
 # Crear la instancia de la aplicación FastAPI
 app = FastAPI(
@@ -14,6 +16,7 @@ app = FastAPI(
 app.include_router(api_router)
 app.include_router(gallery_router)
 app.include_router(public_router)
+app.include_router(optimizado_router)
 
 # Punto de entrada para ejecutar la aplicación
 if __name__ == "__main__":

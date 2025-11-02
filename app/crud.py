@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, func
-from typing import List, Optional, Type
+from sqlalchemy import desc, func, and_, or_
+from typing import List, Optional, Type, Tuple
 from datetime import date
 from app import models, schemas
 from app.models import LogSistema
@@ -132,6 +132,159 @@ def delete_evento(db: Session, evento_id: int) -> bool:
         db.commit()
         return True
     return False
+
+
+def calcular_campos_evento(evento: models.Evento, incluir_todas_imagenes: bool = False) -> dict:
+    """
+    Calcula campos derivados de un evento para optimizar el frontend.
+
+    Args:
+        evento: Modelo del evento
+        incluir_todas_imagenes: Si es True, incluye todas las imagenes. Si es False, solo la preview.
+    """
+
+    # Calcular campos de imagenes
+    total_imagenes = len(evento.imagenes)
+    max_detecciones = max((len(img.detecciones) for img in evento.imagenes), default=0)
+    total_detecciones = sum(len(img.detecciones) for img in evento.imagenes)
+
+    # Obtener imagen con mas detecciones para preview
+    imagen_preview = None
+    if evento.imagenes:
+        imagen_preview = max(evento.imagenes, key=lambda img: len(img.detecciones))
+
+    # Calcular horas de inicio y fin
+    hora_inicio = None
+    hora_fin = None
+    if evento.imagenes:
+        hora_inicio = evento.imagenes[0].hora_subida.strftime("%H:%M:%S") if evento.imagenes[0].hora_subida else None
+        hora_fin = evento.imagenes[-1].hora_subida.strftime("%H:%M:%S") if evento.imagenes[-1].hora_subida else None
+
+    # Calcular promedios de calidad del aire (solo registros con horas unicas)
+    registros_unicos = {}
+    for registro in evento.registros_calidad_aire:
+        if registro.hora_medicion:
+            hora = registro.hora_medicion.strftime("%Y-%m-%d %H:%M")
+            if hora not in registros_unicos:
+                registros_unicos[hora] = registro
+
+    registros_lista = list(registros_unicos.values())
+
+    pm10_values = [r.pm10 for r in registros_lista if r.pm10 is not None]
+    pm2p5_values = [r.pm2p5 for r in registros_lista if r.pm2p5 is not None]
+    pm1p0_values = [r.pm1p0 for r in registros_lista if r.pm1p0 is not None]
+
+    promedio_pm10 = sum(pm10_values) / len(pm10_values) if pm10_values else None
+    promedio_pm2p5 = sum(pm2p5_values) / len(pm2p5_values) if pm2p5_values else None
+    promedio_pm1p0 = sum(pm1p0_values) / len(pm1p0_values) if pm1p0_values else None
+
+    resultado = {
+        "total_imagenes": total_imagenes,
+        "max_detecciones": max_detecciones,
+        "total_detecciones": total_detecciones,
+        "hora_inicio": hora_inicio,
+        "hora_fin": hora_fin,
+        "promedio_pm10": promedio_pm10,
+        "promedio_pm2p5": promedio_pm2p5,
+        "promedio_pm1p0": promedio_pm1p0,
+        "imagen_preview": imagen_preview
+    }
+
+    # Solo incluir todas las imagenes si se solicita (para detalle)
+    if incluir_todas_imagenes:
+        resultado["imagenes"] = evento.imagenes
+        resultado["registros_calidad_aire"] = evento.registros_calidad_aire
+
+    return resultado
+
+
+def get_eventos_optimizado(db: Session, filtros: schemas.EventosFiltros ) -> Tuple[List[models.Evento], int]:
+    """ Obtiene eventos con filtros y ordenamiento optimizado. Retorna una tupla (eventos, total_count) """
+    query = db.query(models.Evento).options(
+        joinedload(models.Evento.usuario),
+        joinedload(models.Evento.imagenes).joinedload(models.Imagen.detecciones),
+        joinedload(models.Evento.registros_calidad_aire)
+    )
+
+    # Aplicar filtros
+    conditions = []
+
+    if filtros.estatus:
+        conditions.append(models.Evento.estatus == filtros.estatus)
+
+    if filtros.usuario_id:
+        conditions.append(models.Evento.usuario_id == filtros.usuario_id)
+
+    if filtros.fecha_inicio and filtros.fecha_fin:
+        conditions.append(
+            and_(
+                models.Evento.fecha_evento >= filtros.fecha_inicio,
+                models.Evento.fecha_evento <= filtros.fecha_fin
+            )
+        )
+    elif filtros.fecha_inicio:
+        conditions.append(models.Evento.fecha_evento >= filtros.fecha_inicio)
+    elif filtros.fecha_fin:
+        conditions.append(models.Evento.fecha_evento <= filtros.fecha_fin)
+
+    if conditions:
+        query = query.filter(and_(*conditions))
+
+    # Contar total sin paginacion
+    total_count = query.count()
+
+    # Ordenar por fecha descendente y aplicar paginacion
+    eventos = query.order_by(desc(models.Evento.fecha_evento)).offset(filtros.skip).limit(filtros.limit).all()
+
+    return eventos, total_count
+
+
+def get_estadisticas_eventos(db: Session, fecha_inicio: Optional[date] = None, fecha_fin: Optional[date] = None) -> dict:
+    """Obtiene estadisticas generales de eventos."""
+
+    query = db.query(models.Evento)
+
+    # Aplicar filtros de fecha
+    if fecha_inicio and fecha_fin:
+        query = query.filter(
+            and_(
+                models.Evento.fecha_evento >= fecha_inicio,
+                models.Evento.fecha_evento <= fecha_fin
+            )
+        )
+    elif fecha_inicio:
+        query = query.filter(models.Evento.fecha_evento >= fecha_inicio)
+    elif fecha_fin:
+        query = query.filter(models.Evento.fecha_evento <= fecha_fin)
+
+    total_eventos = query.count()
+    eventos_pendientes = query.filter(models.Evento.estatus == models.EstatusEventoEnum.pendiente).count()
+    eventos_confirmados = query.filter(models.Evento.estatus == models.EstatusEventoEnum.confirmado).count()
+    eventos_descartados = query.filter(models.Evento.estatus == models.EstatusEventoEnum.descartado).count()
+
+    # Calcular total de detecciones
+    eventos = query.options(
+        joinedload(models.Evento.imagenes).joinedload(models.Imagen.detecciones)
+    ).all()
+
+    total_detecciones = sum(
+        len(imagen.detecciones)
+        for evento in eventos
+        for imagen in evento.imagenes
+    )
+
+    promedio_detecciones = total_detecciones / total_eventos if total_eventos > 0 else 0
+
+    return {
+        "total_eventos": total_eventos,
+        "eventos_pendientes": eventos_pendientes,
+        "eventos_confirmados": eventos_confirmados,
+        "eventos_descartados": eventos_descartados,
+        "total_detecciones": total_detecciones,
+        "promedio_detecciones_por_evento": round(promedio_detecciones, 2),
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin
+    }
 
 
 # OPERACIONES CRUD PARA Imagen Y Deteccion (a menudo se crean juntas)

@@ -146,6 +146,65 @@ class Evento(EventoBase):
         from_attributes = True
 
 
+# ESQUEMAS OPTIMIZADOS PARA EVENTOS CON CAMPOS CALCULADOS
+
+class EventoOptimizado(BaseModel):
+    """Schema de evento con campos calculados para optimizar el frontend."""
+    evento_id: int
+    fecha_evento: date
+    descripcion: Optional[str] = None
+    estatus: EstatusEventoEnum
+    usuario_id: Optional[int] = None
+    usuario: Optional[Usuario] = None
+
+    # Campos calculados
+    total_imagenes: int = 0
+    max_detecciones: int = 0
+    total_detecciones: int = 0
+    hora_inicio: Optional[str] = None
+    hora_fin: Optional[str] = None
+
+    # Promedios de calidad del aire (solo registros con horas unicas)
+    promedio_pm10: Optional[float] = None
+    promedio_pm2p5: Optional[float] = None
+    promedio_pm1p0: Optional[float] = None
+
+    # Solo la imagen con mas detecciones para preview
+    imagen_preview: Optional[Imagen] = None
+
+    class Config:
+        from_attributes = True
+
+
+class EventoDetalleOptimizado(EventoOptimizado):
+    """Schema para detalle de evento con todas las imagenes."""
+    # Todas las imagenes para el detalle
+    imagenes: List[Imagen] = []
+    registros_calidad_aire: List[CalidadAire] = []
+
+
+class EventosFiltros(BaseModel):
+    """Parametros de filtro para listar eventos."""
+    estatus: Optional[EstatusEventoEnum] = None
+    usuario_id: Optional[int] = None
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    skip: int = 0
+    limit: int = 50
+
+
+class EstadisticasEventos(BaseModel):
+    """Estadisticas generales de eventos."""
+    total_eventos: int
+    eventos_pendientes: int
+    eventos_confirmados: int
+    eventos_descartados: int
+    total_detecciones: int
+    promedio_detecciones_por_evento: float
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+
+
 # ESQUEMAS PARA LOGS
 
 class LogSistemaBase(BaseModel):
