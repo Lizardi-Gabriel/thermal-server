@@ -7,6 +7,8 @@ from typing import Optional
 from app import crud, schemas, security, models
 from app.database import get_db
 
+from app.firebase_notifications import enviar_notificacion_multiple
+
 router = APIRouter()
 
 
@@ -51,8 +53,23 @@ def crear_usuario(user: schemas.UsuarioCreate, db: Session = Depends(get_db)):
 
 @router.post("/eventos", response_model=schemas.Evento, status_code=status.HTTP_201_CREATED)
 def crear_evento(evento: schemas.EventoCreate, db: Session = Depends(get_db)):
-    """ Crea un nuevo evento. Requiere autenticación. """
-    return crud.create_evento(db=db, evento=evento)
+    """Crea un nuevo evento. Requiere autenticacion."""
+
+    # Crear el evento
+    nuevo_evento = crud.create_evento(db=db, evento=evento)
+
+    # Obtener tokens FCM de todos los operadores activos
+    tokens_operadores = crud.get_tokens_operadores_activos(db)
+
+    # Enviar notificaciones a todos los operadores
+    if tokens_operadores:
+        try:
+            enviar_notificacion_multiple(tokens_operadores, nuevo_evento.evento_id)
+        except Exception as e:
+            print(f"Error al enviar notificaciones push: {e}")
+            # No fallar la creacion del evento si las notificaciones fallan
+
+    return nuevo_evento
 
 
 # ENDPOINTS DE LOGS

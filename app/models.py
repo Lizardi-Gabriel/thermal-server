@@ -8,7 +8,7 @@ import enum
 
 import enum
 from sqlalchemy import (Column, Integer, String, Float, DateTime, Enum as SQLAlchemyEnum,
-                        ForeignKey, Text, Date)
+                        ForeignKey, Text, Date, Boolean)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -51,6 +51,9 @@ class Usuario(Base):
 
     # Relación: Un usuario puede gestionar muchos eventos.
     eventos = relationship("Evento", back_populates="usuario")
+
+    # Relacion: Un usuario puede tener muchos tokens FCM (multiples dispositivos)
+    tokens_fcm = relationship("TokenFCM", back_populates="usuario")
 
 
 class Evento(Base):
@@ -136,4 +139,19 @@ class LogSistema(Base):
     tipo = Column(SQLAlchemyEnum(TipoLogEnum), default=TipoLogEnum.info)
     mensaje = Column(Text, nullable=False)
     hora_log = Column(DateTime, default=func.now(), index=True)
+
+
+class TokenFCM(Base):
+    """Modelo para la tabla 'tokens_fcm'"""
+    __tablename__ = "tokens_fcm"
+
+    token_id = Column(Integer, primary_key=True, autoincrement=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.usuario_id", ondelete="CASCADE"))
+    token_fcm = Column(String(255), nullable=False)
+    dispositivo = Column(String(100))
+    fecha_registro = Column(DateTime, default=func.now())
+    activo = Column(Boolean, default=True)
+
+    # Relacion: Un token pertenece a un usuario
+    usuario = relationship("Usuario", back_populates="tokens_fcm")
 

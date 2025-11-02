@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import timedelta
@@ -140,3 +141,49 @@ def actualizar_tipo_de_medicion( registro_id: int, nuevo_tipo: schemas.TipoMedic
 def crear_log(log: schemas.LogSistemaCreate, db: Session = Depends(get_db)):
     """ Crea un nuevo log del sistema. """
     return crud.create_log(db=db, log=log)
+
+
+# ENDPOINTS DE TOKEN FCM
+
+@router.post("/registrar-token-fcm", response_model=schemas.TokenFCM, status_code=status.HTTP_201_CREATED)
+def registrar_token_fcm(token_data: schemas.TokenFCMRegistro, db: Session = Depends(get_db), current_user: models.Usuario = Depends(security.get_current_user)):
+    """Registra el token FCM del dispositivo del usuario autenticado."""
+
+    # Verificar si el token ya existe para este usuario
+    token_existente = crud.get_token_fcm_existente(
+        db,
+        usuario_id=current_user.usuario_id,
+        token_fcm=token_data.token_fcm
+    )
+
+    if token_existente:
+        # Si ya existe, solo actualizamos la fecha y lo activamos
+        token_existente.activo = True
+        token_existente.fecha_registro = func.now()
+        if token_data.dispositivo:
+            token_existente.dispositivo = token_data.dispositivo
+        db.commit()
+        db.refresh(token_existente)
+        return token_existente
+
+    # Crear nuevo token
+    nuevo_token = schemas.TokenFCMCreate(
+        usuario_id=current_user.usuario_id,
+        token_fcm=token_data.token_fcm,
+        dispositivo=token_data.dispositivo
+    )
+
+    return crud.create_token_fcm(db=db, token=nuevo_token)
+
+
+@router.delete("/desactivar-token-fcm/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+def desactivar_token(token_id: int, db: Session = Depends(get_db)):
+    """Desactiva un token FCM del usuario."""
+    success = crud.desactivar_token_fcm(db=db, token_id=token_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Token no encontrado"
+        )
+    return None
+

@@ -193,3 +193,33 @@ class ImagenConDetecciones(BaseModel):
     detecciones: List[DeteccionBase]
 
 
+# ESQUEMAS PARA TOKEN FCM
+
+class TokenFCMBase(BaseModel):
+    """Schema base para un token FCM."""
+    token_fcm: str = Field(..., max_length=255, description="Token FCM del dispositivo")
+    dispositivo: Optional[str] = Field(None, max_length=100, description="Informacion del dispositivo")
+
+
+class TokenFCMCreate(TokenFCMBase):
+    """Schema para crear un nuevo token FCM."""
+    usuario_id: int
+
+
+class TokenFCM(TokenFCMBase):
+    """Schema para leer un token FCM."""
+    token_id: int
+    usuario_id: int
+    fecha_registro: datetime
+    activo: bool
+
+    class Config:
+        from_attributes = True
+
+
+class TokenFCMRegistro(BaseModel):
+    """Schema para registrar token desde la app."""
+    token_fcm: str
+    dispositivo: Optional[str] = None
+
+

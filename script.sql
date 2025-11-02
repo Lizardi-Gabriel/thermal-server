@@ -89,6 +89,21 @@ CREATE TABLE logs_sistema(
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- tabla de tokens FCM para notificaciones push
+CREATE TABLE tokens_fcm(
+                           token_id INT AUTO_INCREMENT PRIMARY KEY,
+                           usuario_id INT,
+                           token_fcm VARCHAR(255) NOT NULL,
+                           dispositivo VARCHAR(100),
+                           fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                           activo BOOLEAN DEFAULT TRUE,
+                           FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id) ON DELETE CASCADE,
+                           INDEX idx_usuario_id (usuario_id),
+                           INDEX idx_activo (activo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+
 
 -- registrar usuario: password= password
 INSERT INTO usuarios (nombre_usuario, correo_electronico, hash_contrasena, rol)
