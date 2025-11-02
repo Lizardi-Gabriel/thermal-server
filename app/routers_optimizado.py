@@ -32,7 +32,7 @@ def listar_eventos_optimizado(
         fecha_inicio: Optional[date] = Query(None),
         fecha_fin: Optional[date] = Query(None),
         skip: int = Query(0, ge=0),
-        limit: int = Query(50, ge=1, le=100),
+        limit: int = Query(50, ge=1, le=2000),
         db: Session = Depends(get_db)
 ):
     """
