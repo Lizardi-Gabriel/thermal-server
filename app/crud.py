@@ -234,7 +234,7 @@ def get_eventos_optimizado(db: Session, filtros: schemas.EventosFiltros ) -> Tup
     total_count = query.count()
 
     # Ordenar por fecha descendente y aplicar paginacion
-    eventos = query.order_by(desc(models.Evento.fecha_evento)).offset(filtros.skip).limit(filtros.limit).all()
+    eventos = query.order_by(desc(models.Evento.fecha_evento)).all()
 
     return eventos, total_count
 
