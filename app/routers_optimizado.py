@@ -31,8 +31,8 @@ def listar_eventos_optimizado(
         usuario_id: Optional[int] = Query(None),
         fecha_inicio: Optional[date] = Query(None),
         fecha_fin: Optional[date] = Query(None),
-        skip: int = Query(0, ge=0),
-        limit: int = Query(50, ge=1, le=2000),
+        #skip: int = Query(0, ge=0),
+        #limit: int = Query(50, ge=1, le=2000),
         db: Session = Depends(get_db)
 ):
     """
@@ -50,9 +50,9 @@ def listar_eventos_optimizado(
         estatus=estatus,
         usuario_id=usuario_id,
         fecha_inicio=fecha_inicio,
-        fecha_fin=fecha_fin,
-        skip=skip,
-        limit=limit
+        fecha_fin=fecha_fin
+        #skip=skip,
+        #limit=limit
     )
 
     eventos, total_count = crud.get_eventos_optimizado(db, filtros)
