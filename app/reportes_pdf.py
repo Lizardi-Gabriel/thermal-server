@@ -7,22 +7,20 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('Agg')  # Backend sin GUI
+matplotlib.use('Agg')
 import io
 import os
 from typing import List, Optional
 
 
 def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
-    """Genera grafica de pastel con distribucion de eventos por estatus."""
-
     labels = ['Confirmados', 'Descartados', 'Pendientes']
     sizes = [
         eventos_stats.get('eventos_confirmados', 0),
         eventos_stats.get('eventos_descartados', 0),
         eventos_stats.get('eventos_pendientes', 0)
     ]
-    colors_chart = ['#8BC34A', '#F44336', '#03DAC5']
+    colors_chart = ['#4CAF50', '#D32F2F', '#1976D2']
     explode = (0.05, 0.05, 0.05)
 
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -31,13 +29,11 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
     ax.axis('equal')
     plt.title('Distribución de Eventos por Estatus', fontsize=14, fontweight='bold')
 
-    # Guardar en memoria
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=150)
     img_buffer.seek(0)
     plt.close()
 
-    # Guardar temporalmente
     temp_path = f"/tmp/grafica_estatus_{datetime.now().timestamp()}.png"
     with open(temp_path, 'wb') as f:
         f.write(img_buffer.getvalue())
@@ -46,12 +42,9 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
 
 
 def generar_grafica_calidad_aire(eventos_con_aire: List[dict]) -> Optional[str]:
-    """Genera grafica de barras con promedios de calidad del aire."""
-
     if not eventos_con_aire:
         return None
 
-    # Calcular promedios
     pm10_values = [e['promedio_pm10'] for e in eventos_con_aire if e.get('promedio_pm10')]
     pm2p5_values = [e['promedio_pm2p5'] for e in eventos_con_aire if e.get('promedio_pm2p5')]
     pm1p0_values = [e['promedio_pm1p0'] for e in eventos_con_aire if e.get('promedio_pm1p0')]
@@ -63,10 +56,9 @@ def generar_grafica_calidad_aire(eventos_con_aire: List[dict]) -> Optional[str]:
     promedio_pm2p5 = sum(pm2p5_values) / len(pm2p5_values) if pm2p5_values else 0
     promedio_pm1p0 = sum(pm1p0_values) / len(pm1p0_values) if pm1p0_values else 0
 
-    # Niveles de referencia OMS (μg/m³)
-    limite_pm10 = 45  # Nivel de precaucion OMS
-    limite_pm2p5 = 15  # Nivel de precaucion OMS
-    limite_pm1p0 = 10  # Estimado
+    limite_pm10 = 45
+    limite_pm2p5 = 15
+    limite_pm1p0 = 10
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -77,18 +69,17 @@ def generar_grafica_calidad_aire(eventos_con_aire: List[dict]) -> Optional[str]:
     x = range(len(categories))
     width = 0.35
 
-    # Determinar colores segun si exceden el limite
     bar_colors = []
     for promedio, limite in zip(promedios, limites):
         if promedio > limite:
-            bar_colors.append('#F44336')  # Rojo si excede
+            bar_colors.append('#D32F2F')
         elif promedio > limite * 0.8:
-            bar_colors.append('#FFA726')  # Naranja si esta cerca
+            bar_colors.append('#FFA000')
         else:
-            bar_colors.append('#8BC34A')  # Verde si esta bien
+            bar_colors.append('#4CAF50')
 
     bars1 = ax.bar([i - width/2 for i in x], promedios, width, label='Promedio Medido', color=bar_colors)
-    bars2 = ax.bar([i + width/2 for i in x], limites, width, label='Límite OMS', color='#2196F3', alpha=0.7)
+    bars2 = ax.bar([i + width/2 for i in x], limites, width, label='Límite OMS', color='#757575', alpha=0.7)
 
     ax.set_ylabel('Concentración (μg/m³)', fontweight='bold')
     ax.set_title('Calidad del Aire - Comparación con Límites OMS', fontsize=14, fontweight='bold')
@@ -97,7 +88,6 @@ def generar_grafica_calidad_aire(eventos_con_aire: List[dict]) -> Optional[str]:
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
-    # Agregar valores encima de las barras
     for bar in bars1:
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height,
@@ -106,7 +96,6 @@ def generar_grafica_calidad_aire(eventos_con_aire: List[dict]) -> Optional[str]:
 
     plt.tight_layout()
 
-    # Guardar
     temp_path = f"/tmp/grafica_aire_{datetime.now().timestamp()}.png"
     plt.savefig(temp_path, format='png', bbox_inches='tight', dpi=150)
     plt.close()
@@ -121,20 +110,6 @@ def generar_reporte_pdf(
         fecha_fin: Optional[str] = None,
         output_path: str = "/tmp/reporte.pdf"
 ) -> str:
-    """
-    Genera un reporte PDF completo con estadisticas, graficas y tabla de eventos.
-
-    Args:
-        estadisticas: Dict con estadisticas generales
-        eventos: Lista de eventos con sus datos
-        fecha_inicio: Fecha inicio del reporte (opcional)
-        fecha_fin: Fecha fin del reporte (opcional)
-        output_path: Ruta donde guardar el PDF
-
-    Returns:
-        Ruta del archivo PDF generado
-    """
-
     doc = SimpleDocTemplate(output_path, pagesize=letter,
                             rightMargin=0.5*inch, leftMargin=0.5*inch,
                             topMargin=0.5*inch, bottomMargin=0.5*inch)
@@ -142,12 +117,15 @@ def generar_reporte_pdf(
     story = []
     styles = getSampleStyleSheet()
 
-    # Estilos personalizados
+    color_principal = colors.HexColor('#263238')
+    color_secundario = colors.HexColor('#546E7A')
+    color_texto_cabecera = colors.whitesmoke
+
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=24,
-        textColor=colors.HexColor('#6200EE'),
+        textColor=color_principal,
         spaceAfter=30,
         alignment=TA_CENTER,
         fontName='Helvetica-Bold'
@@ -157,7 +135,7 @@ def generar_reporte_pdf(
         'CustomSubtitle',
         parent=styles['Heading2'],
         fontSize=16,
-        textColor=colors.HexColor('#03DAC5'),
+        textColor=color_secundario,
         spaceAfter=12,
         spaceBefore=12,
         fontName='Helvetica-Bold'
@@ -166,7 +144,6 @@ def generar_reporte_pdf(
     normal_style = styles['BodyText']
     normal_style.alignment = TA_LEFT
 
-    # PORTADA
     story.append(Spacer(1, 1.5*inch))
     story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", title_style))
     story.append(Spacer(1, 0.3*inch))
@@ -179,7 +156,6 @@ def generar_reporte_pdf(
 
     story.append(PageBreak())
 
-    # RESUMEN EJECUTIVO
     story.append(Paragraph("1. RESUMEN EJECUTIVO", subtitle_style))
     story.append(Spacer(1, 0.2*inch))
 
@@ -195,13 +171,12 @@ def generar_reporte_pdf(
 
     resumen_table = Table(resumen_data, colWidths=[3*inch, 2*inch])
     resumen_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6200EE')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('BACKGROUND', (0, 0), (-1, 0), color_principal),
+        ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 12),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 10),
@@ -211,7 +186,6 @@ def generar_reporte_pdf(
     story.append(resumen_table)
     story.append(Spacer(1, 0.3*inch))
 
-    # GRAFICA DE ESTATUS
     story.append(Paragraph("2. DISTRIBUCIÓN DE EVENTOS", subtitle_style))
     grafica_estatus_path = generar_grafica_eventos_por_estatus(estadisticas)
     if grafica_estatus_path and os.path.exists(grafica_estatus_path):
@@ -221,11 +195,9 @@ def generar_reporte_pdf(
 
     story.append(PageBreak())
 
-    # ANALISIS DE CALIDAD DEL AIRE
     story.append(Paragraph("3. ANÁLISIS DE CALIDAD DEL AIRE", subtitle_style))
     story.append(Spacer(1, 0.2*inch))
 
-    # Calcular estadisticas de aire
     eventos_con_aire = [e for e in eventos if e.get('promedio_pm10') or e.get('promedio_pm2p5') or e.get('promedio_pm1p0')]
 
     if eventos_con_aire:
@@ -233,7 +205,6 @@ def generar_reporte_pdf(
         pm2p5_values = [e['promedio_pm2p5'] for e in eventos_con_aire if e.get('promedio_pm2p5')]
         pm1p0_values = [e['promedio_pm1p0'] for e in eventos_con_aire if e.get('promedio_pm1p0')]
 
-        # Tabla de estadisticas de aire
         aire_data = [
             ['Parámetro', 'Promedio', 'Máximo', 'Mínimo', 'Límite OMS', 'Estado']
         ]
@@ -264,13 +235,12 @@ def generar_reporte_pdf(
 
         aire_table = Table(aire_data, colWidths=[1*inch, 1*inch, 1*inch, 1*inch, 1.2*inch, 1*inch])
         aire_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#03DAC5')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), color_secundario),
+            ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 9)
@@ -279,13 +249,11 @@ def generar_reporte_pdf(
         story.append(aire_table)
         story.append(Spacer(1, 0.3*inch))
 
-        # Grafica de calidad del aire
         grafica_aire_path = generar_grafica_calidad_aire(eventos_con_aire)
         if grafica_aire_path and os.path.exists(grafica_aire_path):
             img_aire = Image(grafica_aire_path, width=6*inch, height=3.6*inch)
             story.append(img_aire)
 
-        # Interpretacion
         story.append(Spacer(1, 0.2*inch))
         story.append(Paragraph("<b>Interpretación:</b>", normal_style))
         story.append(Paragraph("• Valores de referencia basados en guías de la OMS para calidad del aire.", normal_style))
@@ -297,7 +265,6 @@ def generar_reporte_pdf(
 
     story.append(PageBreak())
 
-    # TABLA DE EVENTOS
     story.append(Paragraph("4. DETALLE DE EVENTOS", subtitle_style))
     story.append(Spacer(1, 0.2*inch))
 
@@ -305,7 +272,6 @@ def generar_reporte_pdf(
         eventos_data = [['ID', 'Fecha', 'Estatus', 'Detecciones', 'Operador']]
 
         for evento in eventos:
-            # Limitar a 50 eventos por pagina
             operador = evento.get('usuario', {}).get('nombre_usuario', 'N/A') if evento.get('usuario') else 'N/A'
             eventos_data.append([
                 str(evento.get('evento_id', '')),
@@ -317,8 +283,8 @@ def generar_reporte_pdf(
 
         eventos_table = Table(eventos_data, colWidths=[0.6*inch, 1.2*inch, 1.2*inch, 1.2*inch, 2*inch])
         eventos_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6200EE')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), color_principal),
+            ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
@@ -333,7 +299,6 @@ def generar_reporte_pdf(
     else:
         story.append(Paragraph("No hay eventos para mostrar en este período.", normal_style))
 
-    # Construir PDF
     doc.build(story)
 
     try:
@@ -345,3 +310,4 @@ def generar_reporte_pdf(
         pass
 
     return output_path
+
