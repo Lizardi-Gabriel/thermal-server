@@ -37,19 +37,6 @@ async def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-# ENDPOINTS DE USUARIOS
-
-@router.post("/usuarios", response_model=schemas.Usuario, status_code=status.HTTP_201_CREATED)
-def crear_usuario(user: schemas.UsuarioCreate, db: Session = Depends(get_db)):
-    """ Crea un nuevo usuario. Este endpoint es público. """
-    if crud.get_user_by_username(db, nombre_usuario=user.nombre_usuario):
-        raise HTTPException(status_code=400, detail="El nombre de usuario ya está en uso.")
-    if crud.get_user_by_email(db, correo_electronico=user.correo_electronico):
-        raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
-
-    return crud.create_user(db=db, user=user)
-
-
 # ENDPOINTS DE EVENTOS
 
 @router.post("/eventos", response_model=schemas.Evento, status_code=status.HTTP_201_CREATED)

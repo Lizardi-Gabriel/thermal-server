@@ -402,3 +402,82 @@ def get_tokens_operadores_activos(db: Session) -> List[str]:
         models.TokenFCM.activo == True
     ).all()
     return [token[0] for token in tokens]
+
+
+# OPERACIONES CRUD PARA GESTION DE USUARIOS (ADMIN)
+
+def get_all_users_with_stats(db: Session) -> List[dict]:
+    """Obtener todos los usuarios con sus estadisticas."""
+    usuarios = db.query(models.Usuario).all()
+
+    usuarios_con_stats = []
+    for usuario in usuarios:
+        # Contar eventos gestionados
+        eventos_gestionados = db.query(models.Evento).filter(
+            models.Evento.usuario_id == usuario.usuario_id
+        ).all()
+
+        total_gestionados = len(eventos_gestionados)
+        confirmados = sum(1 for e in eventos_gestionados if e.estatus == models.EstatusEventoEnum.confirmado)
+        descartados = sum(1 for e in eventos_gestionados if e.estatus == models.EstatusEventoEnum.descartado)
+
+        usuarios_con_stats.append({
+            "usuario_id": usuario.usuario_id,
+            "nombre_usuario": usuario.nombre_usuario,
+            "correo_electronico": usuario.correo_electronico,
+            "rol": usuario.rol,
+            "total_eventos_gestionados": total_gestionados,
+            "eventos_confirmados": confirmados,
+            "eventos_descartados": descartados
+        })
+
+    return usuarios_con_stats
+
+
+def update_user(db: Session, usuario_id: int, user_update: schemas.UsuarioUpdate) -> Optional[models.Usuario]:
+    """Actualizar un usuario (solo admin)."""
+    db_user = get_user_by_id(db, usuario_id)
+
+    if not db_user:
+        return None
+
+    if user_update.nombre_usuario is not None:
+        # Verificar que el nuevo nombre no este en uso
+        existing = db.query(models.Usuario).filter(
+            models.Usuario.nombre_usuario == user_update.nombre_usuario,
+            models.Usuario.usuario_id != usuario_id
+        ).first()
+        if existing:
+            raise ValueError("El nombre de usuario ya esta en uso")
+        db_user.nombre_usuario = user_update.nombre_usuario
+
+    if user_update.correo_electronico is not None:
+        # Verificar que el nuevo correo no este en uso
+        existing = db.query(models.Usuario).filter(
+            models.Usuario.correo_electronico == user_update.correo_electronico,
+            models.Usuario.usuario_id != usuario_id
+        ).first()
+        if existing:
+            raise ValueError("El correo electronico ya esta en uso")
+        db_user.correo_electronico = user_update.correo_electronico
+
+    if user_update.password is not None:
+        from app.security import hashear_password
+        db_user.hash_contrasena = hashear_password(user_update.password)
+
+    if user_update.rol is not None:
+        db_user.rol = user_update.rol
+
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def delete_user(db: Session, usuario_id: int) -> bool:
+    """Eliminar un usuario (solo admin)."""
+    db_user = get_user_by_id(db, usuario_id)
+    if db_user:
+        db.delete(db_user)
+        db.commit()
+        return True
+    return False

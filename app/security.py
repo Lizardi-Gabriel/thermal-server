@@ -66,3 +66,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if usuario is None:
         raise credentials_exception
     return usuario
+
+
+def verificar_rol_admin(current_user: models.Usuario = Depends(get_current_user)):
+    """Verifica que el usuario actual sea administrador."""
+    if current_user.rol != models.RolUsuarioEnum.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado. Solo administradores pueden realizar esta accion."
+        )
+    return current_user

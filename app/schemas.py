@@ -282,3 +282,36 @@ class TokenFCMRegistro(BaseModel):
     dispositivo: Optional[str] = None
 
 
+# ESQUEMAS PARA GESTION DE USUARIOS (ADMIN)
+
+class UsuarioUpdate(BaseModel):
+    """Schema para actualizar un usuario."""
+    nombre_usuario: Optional[str] = Field(None, max_length=50)
+    correo_electronico: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8)
+    rol: Optional[RolUsuarioEnum] = None
+
+
+class UsuarioListaAdmin(BaseModel):
+    """Schema para listar usuarios (admin)."""
+    usuario_id: int
+    nombre_usuario: str
+    correo_electronico: str
+    rol: RolUsuarioEnum
+    # Estadisticas del usuario
+    total_eventos_gestionados: int = 0
+    eventos_confirmados: int = 0
+    eventos_descartados: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class UsuarioCreateAdmin(BaseModel):
+    """Schema para que admin cree usuarios."""
+    nombre_usuario: str = Field(..., max_length=50)
+    correo_electronico: EmailStr
+    password: str = Field(..., min_length=8)
+    rol: RolUsuarioEnum = RolUsuarioEnum.operador
+
+

@@ -11,3 +11,6 @@ python-multipart
 bcrypt==4.0.1
 requests
 firebase-admin
+reportlab
+matplotlib
+pillow
