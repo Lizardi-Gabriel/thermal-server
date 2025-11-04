@@ -304,7 +304,7 @@ def generar_reporte_pdf(
     if eventos:
         eventos_data = [['ID', 'Fecha', 'Estatus', 'Detecciones', 'Operador']]
 
-        for evento in eventos[:50]:
+        for evento in eventos:
             # Limitar a 50 eventos por pagina
             operador = evento.get('usuario', {}).get('nombre_usuario', 'N/A') if evento.get('usuario') else 'N/A'
             eventos_data.append([
