@@ -145,7 +145,7 @@ def desactivar_token(token_id: int, db: Session = Depends(get_db)):
 
 # ENDPOINTS DE ESTADISTICAS
 
-@router.get("/usuarios/{usuario_id}/estadisticas")
+@router.get("/estadisticas/{usuario_id}")
 def obtener_estadisticas_usuario( usuario_id: int, db: Session = Depends(get_db)):
     """Obtener estadisticas de un usuario especifico."""
 
