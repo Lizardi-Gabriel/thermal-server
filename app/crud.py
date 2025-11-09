@@ -481,3 +481,27 @@ def delete_user(db: Session, usuario_id: int) -> bool:
         db.commit()
         return True
     return False
+
+
+def get_estadisticas_users(db, usuario_id):
+    """Obtener estadisticas de un usuario especifico."""
+    usuario = get_user_by_id(db, usuario_id)
+    if usuario:
+        # Contar eventos gestionados
+        eventos_gestionados = db.query(models.Evento).filter(
+            models.Evento.usuario_id == usuario.usuario_id
+        ).all()
+
+        total_gestionados = len(eventos_gestionados)
+        confirmados = sum(1 for e in eventos_gestionados if e.estatus == models.EstatusEventoEnum.confirmado)
+        descartados = sum(1 for e in eventos_gestionados if e.estatus == models.EstatusEventoEnum.descartado)
+
+        return {
+            "usuario_id": usuario.usuario_id,
+            "total_eventos_gestionados": total_gestionados,
+            "eventos_confirmados": confirmados,
+            "eventos_descartados": descartados
+        }
+
+    return None
+
