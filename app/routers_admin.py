@@ -193,3 +193,18 @@ def obtener_usuario(
             detail="Usuario no encontrado"
         )
     return db_user
+
+
+# ENDPOINTS DE ESTADISTICAS
+
+@router.get("/usuarios/{usuario_id}/estadisticas")
+def obtener_estadisticas_usuario( usuario_id: int, db: Session = Depends(get_db)):
+    """Obtener estadisticas de un usuario especifico."""
+
+    success = crud.get_estadisticas_users(db, usuario_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
+    return success
