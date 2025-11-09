@@ -22,7 +22,7 @@ async def add_process_time_header(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     process_time = time.perf_counter() - start
-    print(f"Tiempo de respuesta: {process_time:.4f} segundos: {request.url.path}")
+    print(f"\nTiempo de respuesta: {process_time:.4f} segundos: {request.url.path}")
     response.headers["X-Process-Time"] = str(f"{process_time:.4f} s")
     return response
 
