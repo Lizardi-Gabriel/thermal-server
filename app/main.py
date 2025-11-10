@@ -7,14 +7,12 @@ from app.routers_admin import router as admin_router
 import time
 
 
-
 # Crear la instancia de la aplicación FastAPI
 app = FastAPI(
     title="Thermal Monitoring API",
     description="API para monitorear calidad del aire y gestionar usuarios e imágenes",
     version="1.0.0"
 )
-
 
 
 @app.middleware("http")

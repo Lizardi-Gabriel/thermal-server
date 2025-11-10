@@ -10,6 +10,9 @@ from app.database import get_db
 
 from app.firebase_notifications import enviar_notificacion_multiple
 
+import secrets
+from app.email_service import enviar_correo_recuperacion
+
 router = APIRouter()
 
 
@@ -114,3 +117,104 @@ def crear_log(log: schemas.LogSistemaCreate, db: Session = Depends(get_db)):
     """ Crea un nuevo log del sistema. """
     return crud.create_log(db=db, log=log)
 
+
+
+@router.post("/auth/forgot-password")
+async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperacionPassword, db: Session = Depends(get_db) ):
+    """
+    Solicitar recuperacion de contraseña.
+    Envia un correo con un enlace para restablecer la contraseña.
+    """
+
+    # Buscar usuario por correo
+    usuario = crud.get_user_by_email(db, correo_electronico=solicitud.correo_electronico)
+
+    # No revelar si el correo existe o no
+    mensaje_exito = {
+        "mensaje": "Si el correo existe en nuestro sistema, recibiras un enlace de recuperacion"
+    }
+
+    if not usuario:
+        # Retornar mensaje generico sin revelar que el usuario no existe
+        return mensaje_exito
+
+    # Generar token unico
+    token = secrets.token_urlsafe(32)
+
+    # Guardar token en BD
+    crud.crear_token_recuperacion(db, usuario.usuario_id, token, minutos_expiracion=30)
+
+    # Enviar correo
+    correo_enviado = enviar_correo_recuperacion(
+        email_destino=usuario.correo_electronico,
+        nombre_usuario=usuario.nombre_usuario,
+        token=token
+    )
+
+    if not correo_enviado:
+        # Log del error pero no revelar al usuario
+        print(f"Error al enviar correo a {usuario.correo_electronico}")
+
+    # Crear log del sistema
+    crud.create_log(db, log=schemas.LogSistemaCreate(
+        tipo=models.TipoLogEnum.info,
+        mensaje=f"Solicitud de recuperacion de contraseña para usuario: {usuario.nombre_usuario}"
+    ))
+
+    return mensaje_exito
+
+
+@router.get("/auth/validate-reset-token/{token}")
+async def validar_token_recuperacion(token: str, db: Session = Depends(get_db)):
+    """Validar si un token de recuperacion es valido."""
+
+    es_valido, mensaje = crud.validar_token_recuperacion(db, token)
+
+    return schemas.ValidarTokenResponse(
+        valido=es_valido,
+        mensaje=mensaje
+    )
+
+
+@router.post("/auth/reset-password")
+async def restablecer_password(datos: schemas.RestablecerPassword, db: Session = Depends(get_db)):
+    """Restablecer contraseña usando un token valido."""
+
+    # Validar token
+    es_valido, mensaje = crud.validar_token_recuperacion(db, datos.token)
+
+    if not es_valido:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=mensaje
+        )
+
+    # Obtener token y usuario
+    db_token = crud.obtener_token_recuperacion(db, datos.token)
+    usuario = crud.get_user_by_id(db, db_token.usuario_id)
+
+    if not usuario:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
+
+    # Actualizar contraseña
+    nueva_password_hash = security.hashear_password(datos.nueva_password)
+    usuario.hash_contrasena = nueva_password_hash
+
+    # Marcar token como usado
+    crud.marcar_token_como_usado(db, datos.token)
+
+    db.commit()
+
+    # Crear log del sistema
+    crud.create_log(db, log=schemas.LogSistemaCreate(
+        tipo=models.TipoLogEnum.info,
+        mensaje=f"Contraseña restablecida para usuario: {usuario.nombre_usuario}"
+    ))
+
+    return schemas.RestablecerPasswordResponse(
+        exito=True,
+        mensaje="Contraseña restablecida exitosamente"
+    )

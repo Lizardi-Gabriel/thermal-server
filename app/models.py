@@ -155,3 +155,18 @@ class TokenFCM(Base):
     # Relacion: Un token pertenece a un usuario
     usuario = relationship("Usuario", back_populates="tokens_fcm")
 
+
+class PasswordResetToken(Base):
+    """Modelo para la tabla 'password_reset_tokens'"""
+    __tablename__ = "password_reset_tokens"
+
+    token_id = Column(Integer, primary_key=True, autoincrement=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.usuario_id", ondelete="CASCADE"), nullable=False)
+    token = Column(String(255), unique=True, nullable=False, index=True)
+    fecha_creacion = Column(DateTime, default=func.now())
+    fecha_expiracion = Column(DateTime, nullable=False, index=True)
+    usado = Column(Boolean, default=False)
+
+    # Relacion con usuario
+    usuario = relationship("Usuario", backref="tokens_recuperacion")
+

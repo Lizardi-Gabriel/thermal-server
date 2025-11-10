@@ -103,6 +103,20 @@ CREATE TABLE tokens_fcm(
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- Tabla de tokens de recuperacion de contraseña
+CREATE TABLE password_reset_tokens(
+    token_id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    token VARCHAR(255) UNIQUE NOT NULL,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_expiracion TIMESTAMP NOT NULL,
+    usado BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id) ON DELETE CASCADE,
+    INDEX idx_token (token),
+    INDEX idx_usuario_id (usuario_id),
+    INDEX idx_fecha_expiracion (fecha_expiracion)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 
 -- registrar usuario: password= password

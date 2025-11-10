@@ -6,6 +6,8 @@ from app import models, schemas
 from app.models import LogSistema
 from app.security import hashear_password
 
+from datetime import datetime, timedelta
+
 
 # OPERACIONES CRUD PARA Usuario
 
@@ -504,4 +506,75 @@ def get_estadisticas_users(db, usuario_id):
         }
 
     return None
+
+
+# OPERACIONES CRUD PARA RECUPERACION DE CONTRASEÑA
+
+def crear_token_recuperacion(db: Session, usuario_id: int, token: str, minutos_expiracion: int = 30) -> models.PasswordResetToken:
+    """Crear un token de recuperacion de contraseña."""
+
+
+    fecha_expiracion = datetime.utcnow() + timedelta(minutes=minutos_expiracion)
+
+    db_token = models.PasswordResetToken(
+        usuario_id=usuario_id,
+        token=token,
+        fecha_expiracion=fecha_expiracion
+    )
+
+    db.add(db_token)
+    db.commit()
+    db.refresh(db_token)
+    return db_token
+
+
+def obtener_token_recuperacion(db: Session, token: str) -> Optional[models.PasswordResetToken]:
+    """Obtener un token de recuperacion por su valor."""
+    return db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.token == token
+    ).first()
+
+
+def validar_token_recuperacion(db: Session, token: str) -> tuple[bool, str]:
+    """ Validar si un token es valido. """
+
+    db_token = obtener_token_recuperacion(db, token)
+
+    if not db_token:
+        return False, "Token no encontrado"
+
+    if db_token.usado:
+        return False, "Este token ya fue utilizado"
+
+    if datetime.utcnow() > db_token.fecha_expiracion:
+        return False, "El token ha expirado"
+
+    return True, "Token valido"
+
+
+def marcar_token_como_usado(db: Session, token: str) -> bool:
+    """Marcar un token como usado."""
+    db_token = obtener_token_recuperacion(db, token)
+
+    if db_token:
+        db_token.usado = True
+        db.commit()
+        return True
+
+    return False
+
+
+def limpiar_tokens_expirados(db: Session) -> int:
+    """Eliminar tokens expirados de la base de datos."""
+    from datetime import datetime
+
+    tokens_eliminados = db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.fecha_expiracion < datetime.utcnow()
+    ).delete()
+
+    db.commit()
+    return tokens_eliminados
+
+
+
 

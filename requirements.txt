@@ -14,3 +14,4 @@ firebase-admin
 reportlab
 matplotlib
 pillow
+sendgrid
