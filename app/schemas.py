@@ -4,6 +4,7 @@ from typing import Optional, List
 from app.models import RolUsuarioEnum, EstatusEventoEnum, TipoMedicionEnum, TipoLogEnum
 
 
+
 # ESQUEMAS PARA USUARIOS
 
 class UsuarioBase(BaseModel):
@@ -314,4 +315,28 @@ class UsuarioCreateAdmin(BaseModel):
     password: str = Field(..., min_length=8)
     rol: RolUsuarioEnum = RolUsuarioEnum.operador
 
+
+# ESQUEMAS PARA RECUPERACION DE CONTRASEÑA
+
+class SolicitudRecuperacionPassword(BaseModel):
+    """Schema para solicitar recuperacion de contraseña."""
+    correo_electronico: EmailStr
+
+
+class ValidarTokenResponse(BaseModel):
+    """Schema para respuesta de validacion de token."""
+    valido: bool
+    mensaje: str
+
+
+class RestablecerPassword(BaseModel):
+    """Schema para restablecer contraseña con token."""
+    token: str
+    nueva_password: str = Field(..., min_length=8, description="Nueva contraseña (minimo 8 caracteres)")
+
+
+class RestablecerPasswordResponse(BaseModel):
+    """Schema para respuesta de restablecimiento."""
+    exito: bool
+    mensaje: str
 

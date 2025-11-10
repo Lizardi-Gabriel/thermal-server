@@ -1,6 +1,5 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional
@@ -79,26 +78,4 @@ def verificar_rol_admin(current_user: models.Usuario = Depends(get_current_user)
     return current_user
 
 
-# ESQUEMAS PARA RECUPERACION DE CONTRASEÑA
 
-class SolicitudRecuperacionPassword(BaseModel):
-    """Schema para solicitar recuperacion de contraseña."""
-    correo_electronico: EmailStr
-
-
-class ValidarTokenResponse(BaseModel):
-    """Schema para respuesta de validacion de token."""
-    valido: bool
-    mensaje: str
-
-
-class RestablecerPassword(BaseModel):
-    """Schema para restablecer contraseña con token."""
-    token: str
-    nueva_password: str = Field(..., min_length=8, description="Nueva contraseña (minimo 8 caracteres)")
-
-
-class RestablecerPasswordResponse(BaseModel):
-    """Schema para respuesta de restablecimiento."""
-    exito: bool
-    mensaje: str
