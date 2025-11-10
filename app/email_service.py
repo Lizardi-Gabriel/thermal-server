@@ -7,7 +7,6 @@ load_dotenv()
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
-SENDGRID_FROM_NAME = os.getenv("SENDGRID_FROM_NAME", "Thermal Monitoring")
 
 
 
@@ -111,7 +110,7 @@ def enviar_correo_recuperacion(email_destino: str, nombre_usuario: str, token: s
 
     # Crear mensaje
     message = Mail(
-        from_email=(SENDGRID_FROM_EMAIL, SENDGRID_FROM_NAME),
+        from_email=SENDGRID_FROM_EMAIL,
         to_emails=email_destino,
         subject='Recuperacion de Contraseña - Thermal Monitoring',
         html_content=html_content
