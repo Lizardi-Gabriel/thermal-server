@@ -79,7 +79,7 @@ def enviar_correo_recuperacion(email_destino: str, nombre_usuario: str, token: s
                 <p>Para crear una nueva contraseña, haz clic en el siguiente boton:</p>
                 
                 <div style="text-align: center;">
-                    <a href="{enlace_recuperacion}" class="button">Restablecer Contraseña</a>
+                    <a href="{enlace_recuperacion}" >Restablecer Contraseña</a>
                 </div>
                 
                 <p>O copia y pega este enlace en la aplicacion:</p>
