@@ -37,7 +37,7 @@ def enviar_correo_recuperacion(email_destino: str, nombre_usuario: str, token: s
                 <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta en Thermal Monitoring.</p>
                 
                 <p>Para crear una nueva contraseña, haz clic en el siguiente boton:</p>
-                <a href="{enlace_recuperacion}" >Restablecer Contraseña</a>
+                <a href="https://google.com" >Restablecer Contraseña</a>
                 
                 <p>Si tienes problemas, contacta al administrador del sistema.</p>
                 <p>Saludos,<br><strong>Equipo de Thermal Monitoring</strong></p>
