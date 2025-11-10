@@ -87,6 +87,8 @@ def enviar_correo_recuperacion(email_destino: str, nombre_usuario: str, token: s
                     {enlace_recuperacion}
                 </p>
                 
+                <a href="{enlace_recuperacion}" ">Restablecer Contraseña</a>
+                
                 <div class="warning">
                     <strong>Importante:</strong>
                     <ul>
