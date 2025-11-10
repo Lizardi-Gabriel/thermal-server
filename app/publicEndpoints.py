@@ -125,6 +125,7 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     Solicitar recuperacion de contraseña.
     Envia un correo con un enlace para restablecer la contraseña.
     """
+    print(f"Solicitud de recuperacion de contraseña para correo: {solicitud.correo_electronico}")
 
     # Buscar usuario por correo
     usuario = crud.get_user_by_email(db, correo_electronico=solicitud.correo_electronico)
@@ -135,6 +136,7 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     }
 
     if not usuario:
+        print(f"Correo: {solicitud.correo_electronico}, no existe")
         # Retornar mensaje generico sin revelar que el usuario no existe
         return mensaje_exito
 
@@ -144,6 +146,7 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     # Guardar token en BD
     crud.crear_token_recuperacion(db, usuario.usuario_id, token, minutos_expiracion=30)
 
+    print(f"se enviara correo a: {usuario.correo_electronico}")
     # Enviar correo
     correo_enviado = enviar_correo_recuperacion(
         email_destino=usuario.correo_electronico,
