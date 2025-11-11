@@ -1,58 +1,102 @@
 from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app import crud, schemas, security
 from app.database import get_db
 
 router = APIRouter()
 
+# URL del logo
+LOGO_URL = "https://thermalalmacen.blob.core.windows.net/fotos/ic_launcher-playstore.png"
+
+# Configuracion de Tailwind con colores del sistema
+TAILWIND_CONFIG = """
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    'morado-termico': '#F4B907',
+                    'amarillo-termico': '#F2B705',
+                    'rojo-termico': '#F20505',
+                }
+            }
+        }
+    }
+</script>
+"""
+
+def generar_head(titulo: str) -> str:
+    """Generar head HTML con configuracion comun."""
+    return f"""
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{titulo} - Thermal Monitoring</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        {TAILWIND_CONFIG}
+    </head>
+    """
+
+def generar_header() -> str:
+    """Generar header HTML con logo y titulo."""
+    return f"""
+    <header class="bg-white shadow-md">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center space-x-3">
+                <img src="{LOGO_URL}" alt="Logo" class="w-12 h-12 rounded-lg">
+                <div>
+                    <h1 class="text-2xl font-bold text-black">Thermal Monitoring</h1>
+                    <p class="text-sm text-gray-600">Sistema de Deteccion Termica</p>
+                </div>
+            </div>
+        </div>
+    </header>
+    """
+
+def generar_footer() -> str:
+    """Generar footer HTML."""
+    return """
+    <footer class="bg-morado-termico text-white py-6 mt-auto">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm">&copy; 2025 Thermal Monitoring. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+    """
+
+def generar_pagina_completa(titulo: str, contenido: str, incluir_header: bool = True) -> str:
+    """Generar estructura HTML completa."""
+    header = generar_header() if incluir_header else ""
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    {generar_head(titulo)}
+    <body class="bg-[#EFEFEF] min-h-screen flex flex-col">
+        {header}
+        {contenido}
+        {generar_footer()}
+    </body>
+    </html>
+    """
+
+def generar_icono_svg(tipo: str) -> str:
+    """Generar iconos SVG segun tipo."""
+    iconos = {
+        'error': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />',
+        'candado': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />',
+        'check': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />',
+        'termometro': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />',
+    }
+    return iconos.get(tipo, '')
+
 
 @router.get("/", response_class=HTMLResponse)
 def pagina_principal():
     """Pagina principal de Thermal Monitoring."""
 
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Thermal Monitoring - Sistema de Deteccion Termica</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script>
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        colors: {
-                            'morado-termico': '#4A107B',
-                            'amarillo-termico': '#F2B705',
-                            'rojo-termico': '#F20505',
-                        }
-                    }
-                }
-            }
-        </script>
-    </head>
-    <body class="bg-[#EFEFEF] min-h-screen">
-        <!-- Header -->
-        <header class="bg-white shadow-md">
-            <div class="container mx-auto px-4 py-6">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <div class="bg-morado-termico text-white w-12 h-12 rounded-lg flex items-center justify-center">
-                            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h1 class="text-2xl font-bold text-black">Thermal Monitoring</h1>
-                            <p class="text-sm text-gray-600">Sistema de Deteccion Termica</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </header>
-
+    contenido = """
+    <main class="flex-grow">
         <!-- Hero Section -->
         <section class="container mx-auto px-4 py-16">
             <div class="max-w-4xl mx-auto text-center">
@@ -187,65 +231,27 @@ def pagina_principal():
                 </div>
             </div>
         </section>
-
-        <!-- Footer -->
-        <footer class="bg-morado-termico text-white py-8">
-            <div class="container mx-auto px-4 text-center">
-                <p class="mb-2">&copy; 2025 Thermal Monitoring. Todos los derechos reservados.</p>
-                <p class="text-sm text-gray-300">Sistema de Monitoreo Termico y Calidad del Aire</p>
-            </div>
-        </footer>
-    </body>
-    </html>
+    </main>
     """
 
-    return HTMLResponse(content=html_content)
-
-
-
+    return HTMLResponse(content=generar_pagina_completa("Inicio", contenido))
 
 
 @router.get("/reset-password", response_class=HTMLResponse)
-def mostrar_formulario_reset_password(
-        request: Request,
-        token: str,
-        db: Session = Depends(get_db)
-):
+def mostrar_formulario_reset_password(token: str, db: Session = Depends(get_db)):
     """Mostrar formulario para restablecer contraseña."""
 
     # Validar token
     es_valido, mensaje = crud.validar_token_recuperacion(db, token)
 
     if not es_valido:
-        # Token invalido o expirado
-        html_error = f"""
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Error - Thermal Monitoring</title>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <script>
-                tailwind.config = {{
-                    theme: {{
-                        extend: {{
-                            colors: {{
-                                'morado-termico': '#4A107B',
-                                'amarillo-termico': '#F2B705',
-                                'rojo-termico': '#F20505',
-                            }}
-                        }}
-                    }}
-                }}
-            </script>
-        </head>
-        <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
+        contenido = f"""
+        <main class="flex-grow flex items-center justify-center p-4">
             <div class="max-w-md w-full">
                 <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                     <div class="text-center mb-6">
                         <svg class="mx-auto h-16 w-16 text-rojo-termico" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            {generar_icono_svg('error')}
                         </svg>
                         <h1 class="text-3xl font-bold mt-4 text-black">Error</h1>
                     </div>
@@ -255,41 +261,19 @@ def mostrar_formulario_reset_password(
                     </div>
                 </div>
             </div>
-        </body>
-        </html>
+        </main>
         """
-        return HTMLResponse(content=html_error, status_code=400)
+        return HTMLResponse(content=generar_pagina_completa("Error", contenido), status_code=400)
 
     # Formulario para nueva contraseña
-    html_formulario = f"""
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Restablecer Contraseña - Thermal Monitoring</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script>
-            tailwind.config = {{
-                theme: {{
-                    extend: {{
-                        colors: {{
-                            'morado-termico': '#4A107B',
-                            'amarillo-termico': '#F2B705',
-                            'rojo-termico': '#F20505',
-                        }}
-                    }}
-                }}
-            }}
-        </script>
-    </head>
-    <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
+    contenido = f"""
+    <main class="flex-grow flex items-center justify-center p-4">
         <div class="max-w-md w-full">
             <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                 <div class="text-center mb-8">
-                    <div class="bg-amarillo-termico text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div class="bg-morado-termico text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                         <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            {generar_icono_svg('candado')}
                         </svg>
                     </div>
                     <h1 class="text-3xl font-bold mb-2 text-black">Restablecer Contraseña</h1>
@@ -333,40 +317,39 @@ def mostrar_formulario_reset_password(
                     
                     <button 
                         type="submit"
-                        class="w-full bg-amarillo-termico hover:bg-[#d9a304] text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 shadow-md">
+                        class="w-full bg-amarillo-termico hover:bg-[#d9a304] text-black font-bold py-3 px-4 rounded-lg transition-colors duration-200 shadow-md">
                         Restablecer Contraseña
                     </button>
                 </form>
             </div>
         </div>
-        
-        <script>
-            function validarFormulario() {{
-                const password = document.getElementById('password').value;
-                const confirmPassword = document.getElementById('confirm_password').value;
-                const errorDiv = document.getElementById('error-message');
-                
-                if (password.length < 8) {{
-                    errorDiv.textContent = 'La contraseña debe tener al menos 8 caracteres';
-                    errorDiv.classList.remove('hidden');
-                    return false;
-                }}
-                
-                if (password !== confirmPassword) {{
-                    errorDiv.textContent = 'Las contraseñas no coinciden';
-                    errorDiv.classList.remove('hidden');
-                    return false;
-                }}
-                
-                errorDiv.classList.add('hidden');
-                return true;
+    </main>
+    
+    <script>
+        function validarFormulario() {{
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+            const errorDiv = document.getElementById('error-message');
+            
+            if (password.length < 8) {{
+                errorDiv.textContent = 'La contraseña debe tener al menos 8 caracteres';
+                errorDiv.classList.remove('hidden');
+                return false;
             }}
-        </script>
-    </body>
-    </html>
+            
+            if (password !== confirmPassword) {{
+                errorDiv.textContent = 'Las contraseñas no coinciden';
+                errorDiv.classList.remove('hidden');
+                return false;
+            }}
+            
+            errorDiv.classList.add('hidden');
+            return true;
+        }}
+    </script>
     """
 
-    return HTMLResponse(content=html_formulario)
+    return HTMLResponse(content=generar_pagina_completa("Restablecer Contraseña", contenido))
 
 
 @router.post("/reset-password-submit", response_class=HTMLResponse)
@@ -380,36 +363,23 @@ def procesar_reset_password(
 
     # Validar que las contraseñas coincidan
     if password != confirm_password:
-        return HTMLResponse(
-            content=generar_html_error("Las contraseñas no coinciden"),
-            status_code=400
-        )
+        return generar_pagina_error("Las contraseñas no coinciden")
 
     # Validar longitud minima
     if len(password) < 8:
-        return HTMLResponse(
-            content=generar_html_error("La contraseña debe tener al menos 8 caracteres"),
-            status_code=400
-        )
+        return generar_pagina_error("La contraseña debe tener al menos 8 caracteres")
 
     # Validar token
     es_valido, mensaje = crud.validar_token_recuperacion(db, token)
-
     if not es_valido:
-        return HTMLResponse(
-            content=generar_html_error(mensaje),
-            status_code=400
-        )
+        return generar_pagina_error(mensaje)
 
     # Obtener token y usuario
     db_token = crud.obtener_token_recuperacion(db, token)
     usuario = crud.get_user_by_id(db, db_token.usuario_id)
 
     if not usuario:
-        return HTMLResponse(
-            content=generar_html_error("Usuario no encontrado"),
-            status_code=404
-        )
+        return generar_pagina_error("Usuario no encontrado")
 
     # Actualizar contraseña
     nueva_password_hash = security.hashear_password(password)
@@ -417,7 +387,6 @@ def procesar_reset_password(
 
     # Marcar token como usado
     crud.marcar_token_como_usado(db, token)
-
     db.commit()
 
     # Crear log del sistema
@@ -428,34 +397,14 @@ def procesar_reset_password(
     ))
 
     # Pagina de exito
-    html_exito = """
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Exito - Thermal Monitoring</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script>
-            tailwind.config = {
-                theme: {
-                    extend: {
-                        colors: {
-                            'morado-termico': '#4A107B',
-                            'amarillo-termico': '#F2B705',
-                        }
-                    }
-                }
-            }
-        </script>
-    </head>
-    <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
+    contenido = """
+    <main class="flex-grow flex items-center justify-center p-4">
         <div class="max-w-md w-full">
             <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                 <div class="text-center mb-6">
                     <div class="bg-green-600 text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                         <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            """ + generar_icono_svg('check') + """
                         </svg>
                     </div>
                     <h1 class="text-3xl font-bold mt-4 text-black">Contraseña Restablecida</h1>
@@ -470,43 +419,21 @@ def procesar_reset_password(
                 </div>
             </div>
         </div>
-    </body>
-    </html>
+    </main>
     """
 
-    return HTMLResponse(content=html_exito)
+    return HTMLResponse(content=generar_pagina_completa("Exito", contenido))
 
 
-def generar_html_error(mensaje: str) -> str:
-    """Generar HTML de error."""
-    return f"""
-    <!DOCTYPE html>
-    <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Error - Thermal Monitoring</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script>
-            tailwind.config = {{
-                theme: {{
-                    extend: {{
-                        colors: {{
-                            'morado-termico': '#4A107B',
-                            'amarillo-termico': '#F2B705',
-                            'rojo-termico': '#F20505',
-                        }}
-                    }}
-                }}
-            }}
-        </script>
-    </head>
-    <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
+def generar_pagina_error(mensaje: str) -> HTMLResponse:
+    """Generar pagina de error."""
+    contenido = f"""
+    <main class="flex-grow flex items-center justify-center p-4">
         <div class="max-w-md w-full">
             <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                 <div class="text-center mb-6">
                     <svg class="mx-auto h-16 w-16 text-rojo-termico" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        {generar_icono_svg('error')}
                     </svg>
                     <h1 class="text-3xl font-bold mt-4 text-black">Error</h1>
                 </div>
@@ -516,6 +443,7 @@ def generar_html_error(mensaje: str) -> str:
                 </div>
             </div>
         </div>
-    </body>
-    </html>
+    </main>
     """
+
+    return HTMLResponse(content=generar_pagina_completa("Error", contenido), status_code=400)
