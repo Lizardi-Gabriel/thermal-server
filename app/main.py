@@ -4,6 +4,7 @@ from app.gallery import router as gallery_router
 from app.publicEndpoints import router as public_router
 from app.routers_optimizado import router as optimizado_router
 from app.routers_admin import router as admin_router
+from app.reset_password_web import router as reset_password_router
 import time
 
 
@@ -31,6 +32,7 @@ app.include_router(gallery_router)
 app.include_router(public_router)
 app.include_router(optimizado_router)
 app.include_router(admin_router)
+app.include_router(reset_password_router)
 
 
 # Punto de entrada para ejecutar la aplicación
