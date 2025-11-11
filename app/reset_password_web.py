@@ -16,7 +16,7 @@ TAILWIND_CONFIG = """
         theme: {
             extend: {
                 colors: {
-                    'morado-termico': '#F4B907',
+                    'morado-termico': '#fb8502',
                     'amarillo-termico': '#F2B705',
                     'rojo-termico': '#F20505',
                 }
@@ -276,7 +276,7 @@ def mostrar_formulario_reset_password(token: str, db: Session = Depends(get_db))
                             {generar_icono_svg('candado')}
                         </svg>
                     </div>
-                    <h1 class="text-3xl font-bold mb-2 text-black">Restablecer Contraseña</h1>
+                    <h1 class="text-3xl font-bold mb-2 text-white">Restablecer Contraseña</h1>
                     <p class="text-gray-600">Ingresa tu nueva contraseña</p>
                 </div>
                 
