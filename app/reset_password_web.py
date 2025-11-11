@@ -8,7 +8,11 @@ router = APIRouter()
 
 
 @router.get("/reset-password", response_class=HTMLResponse)
-def mostrar_formulario_reset_password(request: Request, token: str, db: Session = Depends(get_db)):
+def mostrar_formulario_reset_password(
+        request: Request,
+        token: str,
+        db: Session = Depends(get_db)
+):
     """Mostrar formulario para restablecer contraseña."""
 
     # Validar token
@@ -24,19 +28,32 @@ def mostrar_formulario_reset_password(request: Request, token: str, db: Session 
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Error - Thermal Monitoring</title>
             <script src="https://cdn.tailwindcss.com"></script>
+            <script>
+                tailwind.config = {{
+                    theme: {{
+                        extend: {{
+                            colors: {{
+                                'morado-termico': '#4A107B',
+                                'amarillo-termico': '#F2B705',
+                                'rojo-termico': '#F20505',
+                            }}
+                        }}
+                    }}
+                }}
+            </script>
         </head>
-        <body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+        <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
             <div class="max-w-md w-full">
-                <div class="bg-gray-800 rounded-lg shadow-2xl p-8">
+                <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                     <div class="text-center mb-6">
-                        <svg class="mx-auto h-16 w-16 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg class="mx-auto h-16 w-16 text-rojo-termico" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
-                        <h1 class="text-3xl font-bold mt-4">Error</h1>
+                        <h1 class="text-3xl font-bold mt-4 text-black">Error</h1>
                     </div>
-                    <p class="text-gray-300 text-center mb-6">{mensaje}</p>
+                    <p class="text-gray-600 text-center mb-6">{mensaje}</p>
                     <div class="text-center">
-                        <a href="/" class="text-blue-400 hover:text-blue-300">Volver al inicio</a>
+                        <a href="/" class="text-morado-termico hover:text-amarillo-termico font-semibold">Volver al inicio</a>
                     </div>
                 </div>
             </div>
@@ -54,20 +71,38 @@ def mostrar_formulario_reset_password(request: Request, token: str, db: Session 
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Restablecer Contraseña - Thermal Monitoring</title>
         <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {{
+                theme: {{
+                    extend: {{
+                        colors: {{
+                            'morado-termico': '#4A107B',
+                            'amarillo-termico': '#F2B705',
+                            'rojo-termico': '#F20505',
+                        }}
+                    }}
+                }}
+            }}
+        </script>
     </head>
-    <body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+    <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
         <div class="max-w-md w-full">
-            <div class="bg-gray-800 rounded-lg shadow-2xl p-8">
+            <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                 <div class="text-center mb-8">
-                    <h1 class="text-3xl font-bold mb-2">Restablecer Contraseña</h1>
-                    <p class="text-gray-400">Ingresa tu nueva contraseña</p>
+                    <div class="bg-morado-termico text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    <h1 class="text-3xl font-bold mb-2 text-black">Restablecer Contraseña</h1>
+                    <p class="text-gray-600">Ingresa tu nueva contraseña</p>
                 </div>
                 
                 <form method="POST" action="/reset-password-submit" onsubmit="return validarFormulario()" class="space-y-6">
                     <input type="hidden" name="token" value="{token}">
                     
                     <div>
-                        <label for="password" class="block text-sm font-medium text-gray-300 mb-2">
+                        <label for="password" class="block text-sm font-semibold text-black mb-2">
                             Nueva Contraseña
                         </label>
                         <input 
@@ -76,13 +111,13 @@ def mostrar_formulario_reset_password(request: Request, token: str, db: Session 
                             name="password" 
                             required
                             minlength="8"
-                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                            class="w-full px-4 py-3 bg-[#EFEFEF] border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amarillo-termico focus:border-amarillo-termico text-black"
                             placeholder="Minimo 8 caracteres">
-                        <p class="text-xs text-gray-400 mt-1">Debe tener al menos 8 caracteres</p>
+                        <p class="text-xs text-gray-500 mt-1">Debe tener al menos 8 caracteres</p>
                     </div>
                     
                     <div>
-                        <label for="confirm_password" class="block text-sm font-medium text-gray-300 mb-2">
+                        <label for="confirm_password" class="block text-sm font-semibold text-black mb-2">
                             Confirmar Contraseña
                         </label>
                         <input 
@@ -91,16 +126,16 @@ def mostrar_formulario_reset_password(request: Request, token: str, db: Session 
                             name="confirm_password" 
                             required
                             minlength="8"
-                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
+                            class="w-full px-4 py-3 bg-[#EFEFEF] border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amarillo-termico focus:border-amarillo-termico text-black"
                             placeholder="Repite tu contraseña">
                     </div>
                     
-                    <div id="error-message" class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
+                    <div id="error-message" class="hidden bg-red-50 border-2 border-rojo-termico text-rojo-termico px-4 py-3 rounded-lg font-semibold">
                     </div>
                     
                     <button 
                         type="submit"
-                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200">
+                        class="w-full bg-amarillo-termico hover:bg-[#d9a304] text-black font-bold py-3 px-4 rounded-lg transition-colors duration-200 shadow-md">
                         Restablecer Contraseña
                     </button>
                 </form>
@@ -203,21 +238,37 @@ def procesar_reset_password(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Exito - Thermal Monitoring</title>
         <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            'morado-termico': '#4A107B',
+                            'amarillo-termico': '#F2B705',
+                        }
+                    }
+                }
+            }
+        </script>
     </head>
-    <body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+    <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
         <div class="max-w-md w-full">
-            <div class="bg-gray-800 rounded-lg shadow-2xl p-8">
+            <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                 <div class="text-center mb-6">
-                    <svg class="mx-auto h-16 w-16 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <h1 class="text-3xl font-bold mt-4">Contraseña Restablecida</h1>
+                    <div class="bg-green-600 text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h1 class="text-3xl font-bold mt-4 text-black">Contraseña Restablecida</h1>
                 </div>
-                <p class="text-gray-300 text-center mb-6">
+                <p class="text-gray-600 text-center mb-6">
                     Tu contraseña ha sido restablecida exitosamente. Ya puedes iniciar sesion en la aplicacion movil con tu nueva contraseña.
                 </p>
-                <div class="text-center">
-                    <p class="text-sm text-gray-400">Puedes cerrar esta ventana</p>
+                <div class="bg-amarillo-termico bg-opacity-20 border-2 border-amarillo-termico rounded-lg p-4 mb-6">
+                    <p class="text-sm text-black font-semibold text-center">
+                        Ahora puedes cerrar esta ventana e iniciar sesion en la app
+                    </p>
                 </div>
             </div>
         </div>
@@ -238,23 +289,35 @@ def generar_html_error(mensaje: str) -> str:
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Error - Thermal Monitoring</title>
         <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {{
+                theme: {{
+                    extend: {{
+                        colors: {{
+                            'morado-termico': '#4A107B',
+                            'amarillo-termico': '#F2B705',
+                            'rojo-termico': '#F20505',
+                        }}
+                    }}
+                }}
+            }}
+        </script>
     </head>
-    <body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+    <body class="bg-[#EFEFEF] min-h-screen flex items-center justify-center p-4">
         <div class="max-w-md w-full">
-            <div class="bg-gray-800 rounded-lg shadow-2xl p-8">
+            <div class="bg-white rounded-lg shadow-2xl p-8 border-2 border-gray-200">
                 <div class="text-center mb-6">
-                    <svg class="mx-auto h-16 w-16 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg class="mx-auto h-16 w-16 text-rojo-termico" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
-                    <h1 class="text-3xl font-bold mt-4">Error</h1>
+                    <h1 class="text-3xl font-bold mt-4 text-black">Error</h1>
                 </div>
-                <p class="text-gray-300 text-center mb-6">{mensaje}</p>
+                <p class="text-gray-600 text-center mb-6">{mensaje}</p>
                 <div class="text-center">
-                    <a href="/" class="text-blue-400 hover:text-blue-300">Volver al inicio</a>
+                    <a href="/" class="text-morado-termico hover:text-amarillo-termico font-semibold">Volver al inicio</a>
                 </div>
             </div>
         </div>
     </body>
     </html>
     """
-
