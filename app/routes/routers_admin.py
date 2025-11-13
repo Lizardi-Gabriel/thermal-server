@@ -3,10 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from fastapi.responses import FileResponse
-from app.reportes_pdf import generar_reporte_pdf
+from app.services.reportes_pdf import generar_reporte_pdf
 from datetime import date as date_type, datetime
 
-from app import crud, schemas, models, security
+from app import crud, schemas, models
+from app.services import security
 from app.database import get_db
 
 

@@ -1,10 +1,10 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, func, and_, or_
+from sqlalchemy import desc, func, and_
 from typing import List, Optional, Type, Tuple
 from datetime import date
 from app import models, schemas
 from app.models import LogSistema
-from app.security import hashear_password
+from app.services.security import hashear_password
 
 from datetime import datetime, timedelta
 
@@ -464,7 +464,7 @@ def update_user(db: Session, usuario_id: int, user_update: schemas.UsuarioUpdate
         db_user.correo_electronico = user_update.correo_electronico
 
     if user_update.password is not None:
-        from app.security import hashear_password
+        from app.services.security import hashear_password
         db_user.hash_contrasena = hashear_password(user_update.password)
 
     if user_update.rol is not None:

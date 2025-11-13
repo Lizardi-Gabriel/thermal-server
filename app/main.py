@@ -1,10 +1,13 @@
 from fastapi import FastAPI, Request
-from app.routers import router as api_router
-from app.gallery import router as gallery_router
-from app.publicEndpoints import router as public_router
-from app.routers_optimizado import router as optimizado_router
-from app.routers_admin import router as admin_router
-from app.reset_password_web import router as reset_password_router
+from app.routes.routers import router as api_router
+from app.routes.publicEndpoints import router as public_router
+from app.routes.routers_optimizado import router as optimizado_router
+
+from app.routes_hard.privacy_policy import router as privacy_router
+from app.routes_hard.gallery import router as gallery_router
+from app.routes.routers_admin import router as admin_router
+from app.routes_hard.reset_password_web import router as reset_password_router
+
 import time
 
 
@@ -33,6 +36,7 @@ app.include_router(public_router)
 app.include_router(optimizado_router)
 app.include_router(admin_router)
 app.include_router(reset_password_router)
+app.include_router(privacy_router)
 
 
 # Punto de entrada para ejecutar la aplicación

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request, Form
+from fastapi import APIRouter, Depends, Form
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
-from app import crud, schemas, security
+from app import crud, schemas
+from app.services import security
 from app.database import get_db
 
 router = APIRouter()

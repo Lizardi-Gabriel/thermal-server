@@ -1,14 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import timedelta
-from app import crud, schemas, models, security
+from app import crud, schemas, models
+from app.services import security
 from app.database import get_db
 from datetime import date
-
-from app.aire import consumir_api_aire
 
 router = APIRouter(
     dependencies=[Depends(security.get_current_user)]
@@ -49,7 +46,8 @@ def obtener_evento(evento_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/eventos/{evento_id}/status", response_model=schemas.Evento)
-def actualizar_estatus_evento(evento_id: int, estatus: models.EstatusEventoEnum, db: Session = Depends(get_db), current_user: models.Usuario = Depends(security.get_current_user)):
+def actualizar_estatus_evento(evento_id: int, estatus: models.EstatusEventoEnum, db: Session = Depends(get_db), current_user: models.Usuario = Depends(
+    security.get_current_user)):
     """ Confirma o descarta un evento, asignando al usuario actual como el que realizó la acción. """
     update_data = schemas.EventoUpdate(estatus=estatus, usuario_id=current_user.usuario_id)
     db_evento = crud.update_evento(db, evento_id=evento_id, evento_update=update_data)
@@ -101,7 +99,8 @@ def actualizar_tipo_de_medicion( registro_id: int, nuevo_tipo: schemas.TipoMedic
 # ENDPOINTS DE TOKEN FCM
 
 @router.post("/registrar-token-fcm", response_model=schemas.TokenFCM, status_code=status.HTTP_201_CREATED)
-def registrar_token_fcm(token_data: schemas.TokenFCMRegistro, db: Session = Depends(get_db), current_user: models.Usuario = Depends(security.get_current_user)):
+def registrar_token_fcm(token_data: schemas.TokenFCMRegistro, db: Session = Depends(get_db), current_user: models.Usuario = Depends(
+    security.get_current_user)):
     """Registra el token FCM del dispositivo del usuario autenticado."""
 
     # Verificar si el token ya existe para este usuario

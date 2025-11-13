@@ -4,14 +4,15 @@ from sqlalchemy.orm import Session
 from datetime import timedelta, date
 from typing import Optional
 
-from app import crud, schemas, security, models
-from app.aire import consumir_api_aire
+from app import crud, schemas, models
 from app.database import get_db
 
-from app.firebase_notifications import enviar_notificacion_multiple
+from app.services import security
+from app.services.aire import consumir_api_aire
+from app.services.firebase_notifications import enviar_notificacion_multiple
+from app.services.email_service import enviar_correo_recuperacion
 
 import secrets
-from app.email_service import enviar_correo_recuperacion
 
 router = APIRouter()
 
