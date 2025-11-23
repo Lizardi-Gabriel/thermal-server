@@ -13,7 +13,7 @@ SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
 def enviar_correo_recuperacion(email_destino: str, nombre_usuario: str, token: str) -> bool:
 
     # Construir enlace de recuperacion
-    enlace_recuperacion = f"http://4.155.33.198:8000/reset-password?token={token}"
+    enlace_recuperacion = f"http://48.192.80.197:8000/reset-password?token={token}"
 
     # Contenido HTML del correo
     html_content = f"""
