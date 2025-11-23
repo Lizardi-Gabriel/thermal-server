@@ -4,3 +4,5 @@
 **/__pycache__/
 nohup.out
 /app/__pycache__/
+
+./.idea
