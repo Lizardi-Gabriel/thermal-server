@@ -11,13 +11,11 @@ from app.services import security
 from app.database import get_db
 
 
-
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"],
     dependencies=[Depends(security.verificar_rol_admin)]
 )
-
 
 
 @router.get("/reportes/generar-pdf")
@@ -180,19 +178,5 @@ def eliminar_usuario(
         )
     return None
 
-
-@router.get("/usuarios/{usuario_id}", response_model=schemas.Usuario)
-def obtener_usuario(
-        usuario_id: int,
-        db: Session = Depends(get_db)
-):
-    """Obtener detalles de un usuario especifico."""
-    db_user = crud.get_user_by_id(db, usuario_id)
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
-    return db_user
 
 

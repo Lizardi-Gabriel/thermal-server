@@ -23,27 +23,6 @@ def read_users_me(current_user: models.Usuario = Depends(security.get_current_us
 
 # ENDPOINTS DE EVENTOS
 
-@router.get("/eventos", response_model=List[schemas.Evento])
-def listar_eventos(skip: int = 0, limit: int = 25, db: Session = Depends(get_db)):
-    """ Obtiene una lista de eventos con detalles completos. especificar limit. Requiere autenticación. """
-    return crud.get_eventos(db=db, skip=skip, limit=limit)
-
-
-@router.get("/eventos/fecha/{fecha_evento}", response_model=List[schemas.Evento])
-def listar_eventos_por_fecha(fecha_evento: date, db: Session = Depends(get_db)):
-    """ Obtiene una lista de todos los eventos con detalles completos para una fecha específica. La fecha debe estar en formato AAAA-MM-DD."""
-    eventos = crud.get_eventos_por_fecha(db=db, fecha_evento=fecha_evento)
-    return eventos
-
-
-@router.get("/eventos/{evento_id}", response_model=schemas.Evento)
-def obtener_evento(evento_id: int, db: Session = Depends(get_db)):
-    """ Obtiene los detalles completos de un evento, incluyendo imágenes y mediciones. """
-    db_evento = crud.get_evento_by_id(db, evento_id=evento_id)
-    if db_evento is None:
-        raise HTTPException(status_code=404, detail="Evento no encontrado.")
-    return db_evento
-
 
 @router.put("/eventos/{evento_id}/status", response_model=schemas.Evento)
 def actualizar_estatus_evento(evento_id: int, estatus: models.EstatusEventoEnum, db: Session = Depends(get_db), current_user: models.Usuario = Depends(
