@@ -170,7 +170,8 @@ def eliminar_usuario(
             detail="No puedes eliminar tu propia cuenta"
         )
 
-    success = crud.delete_user(db, usuario_id)
+    success = None #crud.delete_user(db, usuario_id)
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
