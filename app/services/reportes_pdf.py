@@ -46,36 +46,28 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
     """
     Genera una grafica lineal comparando PM2.5 durante el evento vs historico (1 hora antes/despues).
     """
-
-    print("in")
     try:
-        fecha_evento_str = evento.get('fecha_evento') # YYYY-MM-DD
-        hora_inicio_str = evento.get('hora_inicio')   # HH:MM:SS
+        fecha_evento_str = evento.get('fecha_evento')
+        hora_inicio_str = evento.get('hora_inicio')
 
         if not fecha_evento_str or not hora_inicio_str:
             return None
 
-        # Construir datetime del evento
-        fecha_hora_evento = datetime.strptime(f"{fecha_evento_str} {hora_inicio_str}", "%Y-%m-%d %H:%M:%S")
+        fecha_hora_evento = datetime.strptime(f"{fecha_evento_str} {hora_inicio_str}", "%d/%m/%Y %H:%M:%S")
 
-        # Definir ventana de tiempo (30 min antes a 30 min despues)
         inicio_ventana = fecha_hora_evento - timedelta(minutes=30)
         fin_ventana = fecha_hora_evento + timedelta(minutes=30)
 
-        # Obtener timestamps
         ts_start = int(inicio_ventana.timestamp())
         ts_end = int(fin_ventana.timestamp())
 
-        # Obtener datos historicos de la API
         registros = obtener_historico_aire(ts_start, ts_end)
 
         if not registros:
             return None
 
-        # Ordenar por tiempo
         registros.sort(key=lambda x: x.hora_medicion)
 
-        # Preparar datos para plotear
         tiempos = [r.hora_medicion for r in registros]
         valores_pm25 = [r.pm2p5 for r in registros]
         valores_pm10 = [r.pm10 for r in registros]
@@ -111,6 +103,7 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
     except Exception as e:
         print(f"Error generando grafica comparativa: {e}")
         return None
+
 
 def generar_reporte_pdf(
         estadisticas: dict,
