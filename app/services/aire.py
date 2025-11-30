@@ -178,25 +178,19 @@ def obtener_historico_aire(start_timestamp: int, end_timestamp: int) -> List[Cal
 # --- BLOQUE MAIN PARA PRUEBAS ---
 if __name__ == "__main__":
 
-    """
-    Inicio: 2025-11-19 04:50:00 
-    Fin:    2025-11-19 05:10:00
-    """
     import datetime
 
     print("--- PRUEBA DE HISTÓRICO DE AIRE MANUAL ---")
 
-    # 1. DEFINE AQUÍ TU RANGO DE FECHAS (Año-Mes-Dia Hora:Minuto:Segundo)
     fecha_inicio_str = "2025-11-19 04:50:00"
     fecha_fin_str = "2025-11-19 05:10:00"
 
     try:
-        # 2. Convertir strings a objetos datetime
         formato = "%Y-%m-%d %H:%M:%S"
         dt_inicio = datetime.datetime.strptime(fecha_inicio_str, formato)
         dt_fin = datetime.datetime.strptime(fecha_fin_str, formato)
 
-        # 3. Convertir a Timestamps UNIX (enteros) requeridos por la API
+        # Convertir a Timestamps requeridos por la API
         ts_start = int(dt_inicio.timestamp())
         ts_end = int(dt_fin.timestamp())
 
@@ -204,7 +198,6 @@ if __name__ == "__main__":
         print(f"Desde: {dt_inicio} (TS: {ts_start})")
         print(f"Hasta: {dt_fin} (TS: {ts_end})")
 
-        # 4. Llamar a la función
         resultados = obtener_historico_aire(ts_start, ts_end)
 
         print(f"\n--- RESULTADOS ({len(resultados)} registros) ---")
