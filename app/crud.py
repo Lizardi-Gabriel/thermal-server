@@ -198,10 +198,18 @@ def calcular_campos_evento(evento: models.Evento, incluir_todas_imagenes: bool =
     promedio_pm2p5 = sum(pm2p5_values) / len(pm2p5_values) if pm2p5_values else None
     promedio_pm1p0 = sum(pm1p0_values) / len(pm1p0_values) if pm1p0_values else None
 
+    limite_amarillo_pm2p5 = 50.0
+    limite_amarillo_pm10 = 60.0
+    limite_amarillo_pm1p0 = 40.0
+
+    limite_rojo_pm2p5 = 90.0
+    limite_rojo_pm10 = 100.0
+    limite_rojo_pm1p0 = 70.0
+
     # calcular colores segun promedios
-    color_pm10 = obtener_color_aire(promedio_pm10, 45.0, 150.0) if promedio_pm10 is not None else None
-    color_pm2p5 = obtener_color_aire(promedio_pm2p5, 15.0, 55.0) if promedio_pm2p5 is not None else None
-    color_pm1p0 = obtener_color_aire(promedio_pm1p0, 10.0, 35.0) if promedio_pm1p0 is not None else None
+    color_pm10 = obtener_color_aire(promedio_pm10, limite_amarillo_pm10, limite_rojo_pm10) if promedio_pm10 is not None else None
+    color_pm2p5 = obtener_color_aire(promedio_pm2p5, limite_amarillo_pm2p5, limite_rojo_pm2p5) if promedio_pm2p5 is not None else None
+    color_pm1p0 = obtener_color_aire(promedio_pm1p0, limite_amarillo_pm1p0, limite_rojo_pm1p0) if promedio_pm1p0 is not None else None
 
 
 
