@@ -1,10 +1,10 @@
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from datetime import datetime
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
@@ -12,6 +12,7 @@ import io
 import os
 from typing import List, Optional
 
+from app.services.aire import obtener_historico_aire
 
 def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
     labels = ['Confirmados', 'Descartados', 'Pendientes']
@@ -41,67 +42,75 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
     return temp_path
 
 
-def generar_grafica_calidad_aire(eventos_con_aire: List[dict]) -> Optional[str]:
-    if not eventos_con_aire:
+def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
+    """
+    Genera una grafica lineal comparando PM2.5 durante el evento vs historico (1 hora antes/despues).
+    """
+
+    print("in")
+    try:
+        fecha_evento_str = evento.get('fecha_evento') # YYYY-MM-DD
+        hora_inicio_str = evento.get('hora_inicio')   # HH:MM:SS
+
+        if not fecha_evento_str or not hora_inicio_str:
+            return None
+
+        # Construir datetime del evento
+        fecha_hora_evento = datetime.strptime(f"{fecha_evento_str} {hora_inicio_str}", "%Y-%m-%d %H:%M:%S")
+
+        # Definir ventana de tiempo (30 min antes a 30 min despues)
+        inicio_ventana = fecha_hora_evento - timedelta(minutes=30)
+        fin_ventana = fecha_hora_evento + timedelta(minutes=30)
+
+        # Obtener timestamps
+        ts_start = int(inicio_ventana.timestamp())
+        ts_end = int(fin_ventana.timestamp())
+
+        # Obtener datos historicos de la API
+        registros = obtener_historico_aire(ts_start, ts_end)
+
+        if not registros:
+            return None
+
+        # Ordenar por tiempo
+        registros.sort(key=lambda x: x.hora_medicion)
+
+        # Preparar datos para plotear
+        tiempos = [r.hora_medicion for r in registros]
+        valores_pm25 = [r.pm2p5 for r in registros]
+        valores_pm10 = [r.pm10 for r in registros]
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+
+        # Plotear lineas
+        ax.plot(tiempos, valores_pm25, label='PM2.5 (Fino)', color='#FF9800', linewidth=2, marker='o', markersize=4)
+        ax.plot(tiempos, valores_pm10, label='PM10 (Grueso)', color='#795548', linewidth=1.5, linestyle='--')
+
+        # Marcar el momento del evento
+        ax.axvline(x=fecha_hora_evento, color='#D32F2F', linestyle='-', linewidth=2, label='Detección Fumar')
+
+        # Formatear grafica
+        ax.set_title(f'Impacto en Calidad del Aire - Evento #{evento.get("evento_id")}', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Concentración (μg/m³)')
+        ax.set_xlabel('Hora')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # Formatear eje X para mostrar horas
+        import matplotlib.dates as mdates
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        plt.xticks(rotation=45)
+
+        plt.tight_layout()
+
+        temp_path = f"/tmp/grafica_comp_{evento.get('evento_id')}_{datetime.now().timestamp()}.png"
+        plt.savefig(temp_path, format='png', bbox_inches='tight', dpi=150)
+        plt.close()
+
+        return temp_path
+    except Exception as e:
+        print(f"Error generando grafica comparativa: {e}")
         return None
-
-    pm10_values = [e['promedio_pm10'] for e in eventos_con_aire if e.get('promedio_pm10')]
-    pm2p5_values = [e['promedio_pm2p5'] for e in eventos_con_aire if e.get('promedio_pm2p5')]
-    pm1p0_values = [e['promedio_pm1p0'] for e in eventos_con_aire if e.get('promedio_pm1p0')]
-
-    if not pm10_values and not pm2p5_values and not pm1p0_values:
-        return None
-
-    promedio_pm10 = sum(pm10_values) / len(pm10_values) if pm10_values else 0
-    promedio_pm2p5 = sum(pm2p5_values) / len(pm2p5_values) if pm2p5_values else 0
-    promedio_pm1p0 = sum(pm1p0_values) / len(pm1p0_values) if pm1p0_values else 0
-
-    limite_pm10 = 45
-    limite_pm2p5 = 15
-    limite_pm1p0 = 10
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    categories = ['PM10', 'PM2.5', 'PM1.0']
-    promedios = [promedio_pm10, promedio_pm2p5, promedio_pm1p0]
-    limites = [limite_pm10, limite_pm2p5, limite_pm1p0]
-
-    x = range(len(categories))
-    width = 0.35
-
-    bar_colors = []
-    for promedio, limite in zip(promedios, limites):
-        if promedio > limite:
-            bar_colors.append('#D32F2F')
-        elif promedio > limite * 0.8:
-            bar_colors.append('#FFA000')
-        else:
-            bar_colors.append('#4CAF50')
-
-    bars1 = ax.bar([i - width/2 for i in x], promedios, width, label='Promedio Medido', color=bar_colors)
-    bars2 = ax.bar([i + width/2 for i in x], limites, width, label='Límite OMS', color='#757575', alpha=0.7)
-
-    ax.set_ylabel('Concentración (μg/m³)', fontweight='bold')
-    ax.set_title('Calidad del Aire - Comparación con Límites OMS', fontsize=14, fontweight='bold')
-    ax.set_xticks(x)
-    ax.set_xticklabels(categories)
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
-
-    for bar in bars1:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height,
-                f'{height:.1f}',
-                ha='center', va='bottom', fontsize=9, fontweight='bold')
-
-    plt.tight_layout()
-
-    temp_path = f"/tmp/grafica_aire_{datetime.now().timestamp()}.png"
-    plt.savefig(temp_path, format='png', bbox_inches='tight', dpi=150)
-    plt.close()
-
-    return temp_path
-
 
 def generar_reporte_pdf(
         estadisticas: dict,
@@ -147,167 +156,87 @@ def generar_reporte_pdf(
     story.append(Spacer(1, 1.5*inch))
     story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", title_style))
     story.append(Spacer(1, 0.3*inch))
-
     fecha_reporte = datetime.now().strftime("%d/%m/%Y %H:%M")
     story.append(Paragraph(f"Fecha de generación: {fecha_reporte}", styles['Normal']))
-
     if fecha_inicio and fecha_fin:
         story.append(Paragraph(f"Período: {fecha_inicio} a {fecha_fin}", styles['Normal']))
-
     story.append(PageBreak())
 
     story.append(Paragraph("1. RESUMEN EJECUTIVO", subtitle_style))
-    story.append(Spacer(1, 0.2*inch))
-
     resumen_data = [
         ['Métrica', 'Valor'],
         ['Total de Eventos', str(estadisticas.get('total_eventos', 0))],
         ['Eventos Pendientes', str(estadisticas.get('eventos_pendientes', 0))],
         ['Eventos Confirmados', str(estadisticas.get('eventos_confirmados', 0))],
-        ['Eventos Descartados', str(estadisticas.get('eventos_descartados', 0))],
         ['Total de Detecciones', str(estadisticas.get('total_detecciones', 0))],
-        ['Promedio Detecciones/Evento', f"{estadisticas.get('promedio_detecciones_por_evento', 0):.2f}"]
     ]
-
     resumen_table = Table(resumen_data, colWidths=[3*inch, 2*inch])
     resumen_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), color_principal),
         ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 10),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
     ]))
-
     story.append(resumen_table)
     story.append(Spacer(1, 0.3*inch))
 
-    story.append(Paragraph("2. DISTRIBUCIÓN DE EVENTOS", subtitle_style))
+    # Grafica de pastel
     grafica_estatus_path = generar_grafica_eventos_por_estatus(estadisticas)
     if grafica_estatus_path and os.path.exists(grafica_estatus_path):
         img = Image(grafica_estatus_path, width=5*inch, height=3.75*inch)
         story.append(img)
-        story.append(Spacer(1, 0.2*inch))
-
     story.append(PageBreak())
 
-    story.append(Paragraph("3. ANÁLISIS DE CALIDAD DEL AIRE", subtitle_style))
+    story.append(Paragraph("2. ANÁLISIS DE IMPACTO AMBIENTAL", subtitle_style))
+    story.append(Paragraph("A continuación se muestra el comportamiento de las partículas PM2.5 y PM10 antes, durante y después de los eventos confirmados más relevantes.", normal_style))
     story.append(Spacer(1, 0.2*inch))
 
-    eventos_con_aire = [e for e in eventos if e.get('promedio_pm10') or e.get('promedio_pm2p5') or e.get('promedio_pm1p0')]
+    # Filtramos eventos confirmados que tengan datos de aire altos
+    eventos_impacto = [e for e in eventos if e.get('estatus') == 'confirmado']
+    # Limitamos a los ultimos 3 para no saturar el PDF
+    eventos_impacto = eventos_impacto[:3]
 
-    if eventos_con_aire:
-        pm10_values = [e['promedio_pm10'] for e in eventos_con_aire if e.get('promedio_pm10')]
-        pm2p5_values = [e['promedio_pm2p5'] for e in eventos_con_aire if e.get('promedio_pm2p5')]
-        pm1p0_values = [e['promedio_pm1p0'] for e in eventos_con_aire if e.get('promedio_pm1p0')]
+    if eventos_impacto:
+        for evento in eventos_impacto:
+            story.append(Paragraph(f"Evento #{evento.get('evento_id')} - {evento.get('fecha_evento')}", styles['Heading3']))
 
-        aire_data = [
-            ['Parámetro', 'Promedio', 'Máximo', 'Mínimo', 'Límite OMS', 'Estado']
-        ]
+            # Generar grafica comparativa
+            grafica_comp_path = generar_grafica_comparativa_historico(evento)
 
-        if pm10_values:
-            promedio_pm10 = sum(pm10_values) / len(pm10_values)
-            max_pm10 = max(pm10_values)
-            min_pm10 = min(pm10_values)
-            limite_pm10 = 45
-            estado_pm10 = '⚠ ALTO' if promedio_pm10 > limite_pm10 else '✓ Normal'
-            aire_data.append(['PM10', f'{promedio_pm10:.1f}', f'{max_pm10:.1f}', f'{min_pm10:.1f}', f'{limite_pm10}', estado_pm10])
-
-        if pm2p5_values:
-            promedio_pm2p5 = sum(pm2p5_values) / len(pm2p5_values)
-            max_pm2p5 = max(pm2p5_values)
-            min_pm2p5 = min(pm2p5_values)
-            limite_pm2p5 = 15
-            estado_pm2p5 = '⚠ ALTO' if promedio_pm2p5 > limite_pm2p5 else '✓ Normal'
-            aire_data.append(['PM2.5', f'{promedio_pm2p5:.1f}', f'{max_pm2p5:.1f}', f'{min_pm2p5:.1f}', f'{limite_pm2p5}', estado_pm2p5])
-
-        if pm1p0_values:
-            promedio_pm1p0 = sum(pm1p0_values) / len(pm1p0_values)
-            max_pm1p0 = max(pm1p0_values)
-            min_pm1p0 = min(pm1p0_values)
-            limite_pm1p0 = 10
-            estado_pm1p0 = '⚠ ALTO' if promedio_pm1p0 > limite_pm1p0 else '✓ Normal'
-            aire_data.append(['PM1.0', f'{promedio_pm1p0:.1f}', f'{max_pm1p0:.1f}', f'{min_pm1p0:.1f}', f'{limite_pm1p0}', estado_pm1p0])
-
-        aire_table = Table(aire_data, colWidths=[1*inch, 1*inch, 1*inch, 1*inch, 1.2*inch, 1*inch])
-        aire_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), color_secundario),
-            ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9)
-        ]))
-
-        story.append(aire_table)
-        story.append(Spacer(1, 0.3*inch))
-
-        grafica_aire_path = generar_grafica_calidad_aire(eventos_con_aire)
-        if grafica_aire_path and os.path.exists(grafica_aire_path):
-            img_aire = Image(grafica_aire_path, width=6*inch, height=3.6*inch)
-            story.append(img_aire)
-
-        story.append(Spacer(1, 0.2*inch))
-        story.append(Paragraph("<b>Interpretación:</b>", normal_style))
-        story.append(Paragraph("• Valores de referencia basados en guías de la OMS para calidad del aire.", normal_style))
-        story.append(Paragraph("• PM10: Límite 45 μg/m³ (promedio 24h)", normal_style))
-        story.append(Paragraph("• PM2.5: Límite 15 μg/m³ (promedio 24h)", normal_style))
-        story.append(Paragraph("• PM1.0: Límite estimado 10 μg/m³", normal_style))
+            if grafica_comp_path and os.path.exists(grafica_comp_path):
+                print("inin")
+                img_comp = Image(grafica_comp_path, width=6*inch, height=3*inch)
+                story.append(img_comp)
+                story.append(Paragraph("Nota: La línea roja vertical indica el momento exacto de la detección del fumador.", styles['Italic']))
+                story.append(Spacer(1, 0.3*inch))
+            else:
+                print("on")
+                story.append(Paragraph("No hay datos históricos suficientes para generar la gráfica comparativa.", styles['Italic']))
     else:
-        story.append(Paragraph("No hay datos suficientes de calidad del aire para análisis.", normal_style))
+        story.append(Paragraph("No hay eventos confirmados recientes para analizar el impacto histórico.", normal_style))
 
     story.append(PageBreak())
 
-    story.append(Paragraph("4. DETALLE DE EVENTOS", subtitle_style))
-    story.append(Spacer(1, 0.2*inch))
-
+    story.append(Paragraph("3. DETALLE DE EVENTOS", subtitle_style))
     if eventos:
-        eventos_data = [['ID', 'Fecha', 'Estatus', 'Detecciones', 'Operador']]
-
+        eventos_data = [['ID', 'Fecha', 'Estatus', 'Max PM2.5', 'Operador']]
         for evento in eventos:
             operador = evento.get('usuario', {}).get('nombre_usuario', 'N/A') if evento.get('usuario') else 'N/A'
+            pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "N/A"
             eventos_data.append([
                 str(evento.get('evento_id', '')),
                 evento.get('fecha_evento', ''),
                 evento.get('estatus', '').upper(),
-                str(evento.get('max_detecciones', 0)),
+                pm25,
                 operador
             ])
-
         eventos_table = Table(eventos_data, colWidths=[0.6*inch, 1.2*inch, 1.2*inch, 1.2*inch, 2*inch])
         eventos_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), color_principal),
             ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
         ]))
-
         story.append(eventos_table)
-    else:
-        story.append(Paragraph("No hay eventos para mostrar en este período.", normal_style))
 
     doc.build(story)
-
-    try:
-        if grafica_estatus_path and os.path.exists(grafica_estatus_path):
-            os.remove(grafica_estatus_path)
-        if 'grafica_aire_path' in locals() and grafica_aire_path and os.path.exists(grafica_aire_path):
-            os.remove(grafica_aire_path)
-    except:
-        pass
-
     return output_path
-
