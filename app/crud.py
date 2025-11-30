@@ -136,6 +136,24 @@ def delete_evento(db: Session, evento_id: int) -> bool:
     return False
 
 
+def obtener_color_aire(valor: float, limite_amarillo: float, limite_rojo: float) -> str:
+    """Devuelve el código HEX del color según los umbrales de contaminación."""
+    if valor is None:
+        # Gris
+        return "#898989"
+
+    if valor >= limite_rojo:
+        # Rojo
+        return "#F20505"
+
+    if valor >= limite_amarillo:
+        # Amarillo
+        return "#F2B705"
+
+    # Verde
+    return "#009900"
+
+
 def calcular_campos_evento(evento: models.Evento, incluir_todas_imagenes: bool = False) -> dict:
     """
     Calcula campos derivados de un evento para optimizar el frontend.
@@ -180,6 +198,13 @@ def calcular_campos_evento(evento: models.Evento, incluir_todas_imagenes: bool =
     promedio_pm2p5 = sum(pm2p5_values) / len(pm2p5_values) if pm2p5_values else None
     promedio_pm1p0 = sum(pm1p0_values) / len(pm1p0_values) if pm1p0_values else None
 
+    # calcular colores segun promedios
+    color_pm10 = obtener_color_aire(promedio_pm10, 45.0, 150.0) if promedio_pm10 is not None else None
+    color_pm2p5 = obtener_color_aire(promedio_pm2p5, 15.0, 55.0) if promedio_pm2p5 is not None else None
+    color_pm1p0 = obtener_color_aire(promedio_pm1p0, 10.0, 35.0) if promedio_pm1p0 is not None else None
+
+
+
     resultado = {
         "total_imagenes": total_imagenes,
         "max_detecciones": max_detecciones,
@@ -189,6 +214,9 @@ def calcular_campos_evento(evento: models.Evento, incluir_todas_imagenes: bool =
         "promedio_pm10": promedio_pm10,
         "promedio_pm2p5": promedio_pm2p5,
         "promedio_pm1p0": promedio_pm1p0,
+        "color_pm10": color_pm10,
+        "color_pm2p5": color_pm2p5,
+        "color_pm1p0": color_pm1p0,
         "imagen_preview": imagen_preview
     }
 
