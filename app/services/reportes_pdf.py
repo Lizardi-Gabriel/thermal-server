@@ -4,7 +4,7 @@ import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List, Optional
-
+import pytz
 import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -19,9 +19,26 @@ from app.services.aire import obtener_historico_aire
 
 matplotlib.use('Agg')
 
+# Definicion de Zonas Horarias
+UTC_TZ = pytz.utc
+MEX_TZ = pytz.timezone('America/Mexico_City')
+
+
+def convertir_utc_a_mexico(fecha_str: str, hora_str: str) -> datetime:
+    """Convierte fecha y hora string (UTC) a objeto datetime en hora de Mexico."""
+    try:
+        # Crear datetime ingenuo (naive) desde los strings
+        dt_naive = datetime.strptime(f"{fecha_str} {hora_str}", "%d/%m/%Y %H:%M:%S")
+        # Localizarlo como UTC
+        dt_utc = UTC_TZ.localize(dt_naive)
+        # Convertir a Mexico
+        return dt_utc.astimezone(MEX_TZ)
+    except Exception as e:
+        print(f"Error convirtiendo fecha: {e}")
+        return datetime.now(MEX_TZ)
+
 
 def generar_grafica_eventos_por_estatus(eventosStats: dict) -> str:
-    # generar grafica de pastel para resumen de estatus
     labels = ['Confirmados', 'Descartados', 'Pendientes']
     sizes = [
         eventosStats.get('eventos_confirmados', 0),
@@ -29,7 +46,6 @@ def generar_grafica_eventos_por_estatus(eventosStats: dict) -> str:
         eventosStats.get('eventos_pendientes', 0)
     ]
 
-    # validar si hay datos para graficar
     if sum(sizes) == 0:
         fig, ax = plt.subplots(figsize=(8, 6))
         ax.text(0.5, 0.5, 'Sin eventos registrados',
@@ -51,120 +67,139 @@ def generar_grafica_eventos_por_estatus(eventosStats: dict) -> str:
     plt.close()
 
     tempPath = f"/tmp/grafica_estatus_{datetime.now().timestamp()}.png"
-
     with open(tempPath, 'wb') as f:
         f.write(imgBuffer.getvalue())
 
     return tempPath
 
 
-def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional[str]:
-    # generar grafica lineal del dia con marcas de eventos
+def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> Optional[str]:
+    """
+    Genera una grafica para un dia especifico (Hora Mexico).
+    El rango de tiempo es: [Inicio Primer Evento - 30min] hasta [Fin Ultimo Evento + 30min]
+    """
     try:
-        # definir rango del dia para contexto historico completo
-        fechaBase = datetime.strptime(fechaStr, "%d/%m/%Y")
-        inicioDia = fechaBase.replace(hour=0, minute=0, second=0)
-        finDia = fechaBase.replace(hour=23, minute=59, second=59)
+        if not eventos_del_dia:
+            return None
 
-        tsStart = int(inicioDia.timestamp())
-        tsEnd = int(finDia.timestamp())
+        # 1. Determinar el rango de tiempo necesario para la grafica (basado en hora Mexico)
+        min_hora_mex = None
+        max_hora_mex = None
 
-        # obtener registros de aire para el dia
-        registros = obtener_historico_aire(tsStart, tsEnd)
+        eventos_procesados = []
+
+        for evento in eventos_del_dia:
+            # Convertimos las horas del evento (que vienen en UTC strings) a objetos datetime Mexico
+            inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
+            fin_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_fin'))
+
+            # Guardamos las versiones convertidas para usarlas al pintar los cuadros rojos
+            eventos_procesados.append({
+                'inicio': inicio_mex,
+                'fin': fin_mex,
+                'id': evento.get('evento_id')
+            })
+
+            # Actualizar limites
+            if min_hora_mex is None or inicio_mex < min_hora_mex:
+                min_hora_mex = inicio_mex
+
+            if max_hora_mex is None or fin_mex > max_hora_mex:
+                max_hora_mex = fin_mex
+
+        # Aplicar el buffer de 30 minutos solicitado
+        start_buffer = min_hora_mex - timedelta(minutes=30)
+        end_buffer = max_hora_mex + timedelta(minutes=30)
+
+        # 2. Obtener datos historicos usando timestamps UTC (el servicio espera timestamps absolutos)
+        ts_start = int(start_buffer.timestamp())
+        ts_end = int(end_buffer.timestamp())
+
+        registros = obtener_historico_aire(ts_start, ts_end)
 
         if not registros:
-            print(f"DEBUG: No se encontraron registros para {fechaStr}")
+            print(f"DEBUG: No se encontraron registros de aire para el rango {start_buffer} - {end_buffer}")
+            # se puede graficar los cuadros rojos vacios
             return None
 
-        # filtrar registros validos
-        registrosFiltrados = [
-            r for r in registros
-            if r.pm1p0 > 0 and r.pm2p5 > 0 and r.pm10 > 0
-        ]
+        # Procesar datos para graficar (Convertir timestamps de medicion a Hora Mexico)
+        registros_filtrados = [r for r in registros if r.pm1p0 > 0 and r.pm2p5 > 0 and r.pm10 > 0]
 
-        if not registrosFiltrados:
-            print(f"DEBUG: Registros encontrados pero filtrados por valores cero para {fechaStr}")
-            return None
+        # Ordenar por tiempo
+        registros_filtrados.sort(key=lambda x: x.hora_medicion)
 
-        registrosFiltrados.sort(key=lambda x: x.hora_medicion)
+        # Convertir hora_medicion a datetime Mexico para el eje X
+        tiempos_mex = []
+        valores_pm1 = []
+        valores_pm25 = []
+        valores_pm10 = []
 
-        # diagnostico de datos
-        print(f"DEBUG: Graficando {len(registrosFiltrados)} puntos para {fechaStr}")
+        for r in registros_filtrados:
+            # r.hora_medicion es un timestamp o datetime
+            if isinstance(r.hora_medicion, (int, float)):
+                dt_utc = datetime.fromtimestamp(r.hora_medicion, pytz.utc)
+            elif isinstance(r.hora_medicion, datetime):
+                dt_utc = r.hora_medicion if r.hora_medicion.tzinfo else pytz.utc.localize(r.hora_medicion)
+            else:
+                # Formato desconocido
+                continue
 
-        tiempos = [r.hora_medicion for r in registrosFiltrados]
-        valoresPm1 = [r.pm1p0 for r in registrosFiltrados]
-        valoresPm25 = [r.pm2p5 for r in registrosFiltrados]
-        valoresPm10 = [r.pm10 for r in registrosFiltrados]
+            dt_mex = dt_utc.astimezone(MEX_TZ)
 
+            tiempos_mex.append(dt_mex)
+            valores_pm1.append(r.pm1p0)
+            valores_pm25.append(r.pm2p5)
+            valores_pm10.append(r.pm10)
+
+        # Configurar Grafica
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        # plotear lineas de historico
-        ax.plot(tiempos, valoresPm1, label='PM1', color='#ff6ffb', linewidth=1, alpha=0.7)
-        ax.plot(tiempos, valoresPm25, label='PM2.5', color='#FF9800', linewidth=2)
-        ax.plot(tiempos, valoresPm10, label='PM10', color='#795548', linewidth=1, linestyle='--')
+        # Plotear lineas
+        ax.plot(tiempos_mex, valores_pm1, label='PM1', color='#ff6ffb', linewidth=1, alpha=0.7)
+        ax.plot(tiempos_mex, valores_pm25, label='PM2.5', color='#FF9800', linewidth=2)
+        ax.plot(tiempos_mex, valores_pm10, label='PM10', color='#795548', linewidth=1, linestyle='--')
 
-        # iterar eventos para pintar franjas de duracion
-        for evento in eventosDelDia:
-            horaInicio = evento.get('hora_inicio')
-            horaFin = evento.get('hora_fin')
-            eventoId = evento.get('evento_id')
+        # Plotear franjas de eventos (ya convertidos a Mexico)
+        for ev in eventos_procesados:
+            ax.axvspan(ev['inicio'], ev['fin'], color='red', alpha=0.3)
+            # Etiqueta rotada
+            ax.text(ev['inicio'], ax.get_ylim()[1], f"#{ev['id']}",
+                    rotation=90, verticalalignment='bottom', fontsize=8, color='red')
 
-            if horaInicio and horaFin:
-                try:
-                    dtInicio = datetime.strptime(f"{fechaStr} {horaInicio}", "%d/%m/%Y %H:%M:%S")
-                    dtFin = datetime.strptime(f"{fechaStr} {horaFin}", "%d/%m/%Y %H:%M:%S")
-
-                    # validar que el intervalo sea valido > 0 para evitar error de vertices
-                    if dtFin > dtInicio:
-                        # pintar area sombreada para el evento
-                        ax.axvspan(dtInicio, dtFin, color='red', alpha=0.3)
-                        # etiquetar el evento en la parte superior
-                        ax.text(dtInicio, ax.get_ylim()[1], f"#{eventoId}", rotation=90, verticalalignment='bottom', fontsize=8)
-                    else:
-                        print(f"DEBUG: Evento {eventoId} ignorado por duracion invalida (Inicio: {dtInicio}, Fin: {dtFin})")
-                except Exception as evErr:
-                    print(f"DEBUG: Error procesando evento {eventoId}: {evErr}")
-
-        ax.set_title(f'Monitoreo de Calidad del Aire - {fechaStr}', fontsize=12, fontweight='bold')
+        ax.set_title(f'Monitoreo de Calidad del Aire - {fecha_mex_str} (Horario CDMX)', fontsize=12, fontweight='bold')
         ax.set_ylabel('Concentración (μg/m³)')
-        ax.set_xlabel('Hora')
+        ax.set_xlabel('Hora (CDMX)')
 
-        # configurar leyenda y grid
+        # Formato de fecha en eje X
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M', tz=MEX_TZ))
+        ax.tick_params(axis='x', rotation=45)
+
+        # Grid y Leyenda
+        ax.grid(True, alpha=0.3)
         from matplotlib.lines import Line2D
         customLines = [
             Line2D([0], [0], color='#ff6ffb', lw=1),
             Line2D([0], [0], color='#FF9800', lw=2),
             Line2D([0], [0], color='#795548', lw=1, linestyle='--'),
-            matplotlib.patches.Patch(facecolor='red', edgecolor='red', alpha=0.3, label='Evento Detectado')
+            matplotlib.patches.Patch(facecolor='red', edgecolor='red', alpha=0.3, label='Evento')
         ]
         ax.legend(customLines, ['PM1', 'PM2.5', 'PM10', 'Evento'], loc='upper right')
 
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        ax.tick_params(axis='x', rotation=45)
-
-        # asegurar limites x validos para evitar division por cero
-        if tiempos:
-            minTime = min(tiempos)
-            maxTime = max(tiempos)
-
-            # verificar si hay un solo punto o rango cero
-            if minTime == maxTime:
-                minTime = minTime - timedelta(minutes=30)
-                maxTime = maxTime + timedelta(minutes=30)
-
-            ax.set_xlim(left=minTime, right=maxTime)
+        # Ajustar limites X estrictamente a 30min antes/despues
+        ax.set_xlim(left=start_buffer, right=end_buffer)
 
         plt.tight_layout()
 
-        tempPath = f"/tmp/grafica_dia_{fechaBase.strftime('%Y%m%d')}_{datetime.now().timestamp()}.png"
+        # Guardar imagen
+        filename_safe = fecha_mex_str.replace('/', '-')
+        tempPath = f"/tmp/grafica_dia_{filename_safe}_{datetime.now().timestamp()}.png"
         plt.savefig(tempPath, format='png', bbox_inches='tight', dpi=150)
         plt.close()
 
         return tempPath
 
     except Exception as e:
-        print(f"error generando grafica diaria: {e}")
+        print(f"Error generando grafica diaria {fecha_mex_str}: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -177,49 +212,32 @@ def generar_reporte_pdf(
         fecha_fin: Optional[str] = None,
         output_path: str = "/tmp/reporte.pdf"
 ) -> str:
-    # inicializar documento pdf
+
     doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
     story = []
     styles = getSampleStyleSheet()
 
+    # Estilos
     colorPrincipal = colors.HexColor('#263238')
     colorSecundario = colors.HexColor('#546E7A')
     colorTextoCabecera = colors.whitesmoke
 
-    titleStyle = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colorPrincipal,
-        spaceAfter=30,
-        alignment=TA_CENTER,
-        fontName='Helvetica-Bold'
-    )
-
-    subtitleStyle = ParagraphStyle(
-        'CustomSubtitle',
-        parent=styles['Heading2'],
-        fontSize=16,
-        textColor=colorSecundario,
-        spaceAfter=12,
-        spaceBefore=12,
-        fontName='Helvetica-Bold'
-    )
-
+    titleStyle = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24, textColor=colorPrincipal, spaceAfter=30, alignment=TA_CENTER, fontName='Helvetica-Bold')
+    subtitleStyle = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'], fontSize=16, textColor=colorSecundario, spaceAfter=12, spaceBefore=12, fontName='Helvetica-Bold')
     normalStyle = styles['BodyText']
     normalStyle.alignment = TA_LEFT
 
-    # agregar portada y resumen
+    # --- PORTADA Y RESUMEN ---
     story.append(Spacer(1, 1.5*inch))
     story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", titleStyle))
     story.append(Spacer(1, 0.3*inch))
-    fechaReporte = datetime.now().strftime("%d/%m/%Y %H:%M")
-    story.append(Paragraph(f"Fecha de generación: {fechaReporte}", styles['Normal']))
+    fechaReporte = datetime.now(MEX_TZ).strftime("%d/%m/%Y %H:%M") # Fecha reporte en local
+    story.append(Paragraph(f"Fecha de generación: {fechaReporte} (CDMX)", styles['Normal']))
     if fecha_inicio and fecha_fin:
-        story.append(Paragraph(f"Período: {fecha_inicio} a {fecha_fin}", styles['Normal']))
+        story.append(Paragraph(f"Período consultado: {fecha_inicio} a {fecha_fin}", styles['Normal']))
     story.append(PageBreak())
 
-    # seccion 1 resumen ejecutivo
+    # --- SECCION 1 ---
     story.append(Paragraph("1. RESUMEN EJECUTIVO", subtitleStyle))
     resumenData = [
         ['Métrica', 'Valor'],
@@ -244,52 +262,70 @@ def generar_reporte_pdf(
         story.append(img)
     story.append(PageBreak())
 
-    # seccion 2 analisis diario
     story.append(Paragraph("2. ANÁLISIS DIARIO DE CALIDAD DEL AIRE", subtitleStyle))
-    story.append(Paragraph("Visualización del comportamiento de partículas PM1, PM2.5 y PM10 agrupado por día. Las áreas sombreadas en rojo indican la duración de los eventos detectados.", normalStyle))
+    story.append(Paragraph("Gráficas en horario local (Ciudad de México). El rango visualizado abarca desde 30 minutos antes del primer evento hasta 30 minutos después del último evento del día.", normalStyle))
     story.append(Spacer(1, 0.2*inch))
 
-    # agrupar eventos por fecha
-    eventosPorDia = defaultdict(list)
+    # AGRUPAR POR FECHA LOCAL
+    eventos_por_dia_local = defaultdict(list)
+
     for ev in eventos:
-        fecha = ev.get('fecha_evento')
-        if fecha:
-            eventosPorDia[fecha].append(ev)
+        fecha_utc = ev.get('fecha_evento')
+        hora_utc = ev.get('hora_inicio')
+        if fecha_utc and hora_utc:
+            dt_mex = convertir_utc_a_mexico(fecha_utc, hora_utc)
+            fecha_local_str = dt_mex.strftime("%d/%m/%Y")
 
-    if eventosPorDia:
-        # iterar fechas ordenadas
-        for fechaStr in sorted(eventosPorDia.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y")):
-            eventosDelDia = eventosPorDia[fechaStr]
+            # guardar el evento original en la lista de ese dia local
+            eventos_por_dia_local[fecha_local_str].append(ev)
 
-            story.append(Paragraph(f"Día: {fechaStr}", styles['Heading3']))
-            story.append(Paragraph(f"Eventos detectados: {len(eventosDelDia)}", styles['Normal']))
+    if eventos_por_dia_local:
+        # Ordenar por fecha
+        dias_ordenados = sorted(eventos_por_dia_local.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y"))
 
-            # generar grafica unica por dia
-            graficaDiaPath = generar_grafica_diaria(fechaStr, eventosDelDia)
+        for fecha_str in dias_ordenados:
+            eventos_del_dia = eventos_por_dia_local[fecha_str]
+
+            story.append(Paragraph(f"Día: {fecha_str}", styles['Heading3']))
+            story.append(Paragraph(f"Eventos en este día: {len(eventos_del_dia)}", styles['Normal']))
+
+            # Generar grafica pasando la fecha local y la lista de eventos
+            graficaDiaPath = generar_grafica_diaria(fecha_str, eventos_del_dia)
 
             if graficaDiaPath and os.path.exists(graficaDiaPath):
                 imgDia = Image(graficaDiaPath, width=7*inch, height=3.5*inch)
                 story.append(imgDia)
             else:
-                story.append(Paragraph("No hay datos históricos disponibles para este día.", styles['Italic']))
+                story.append(Paragraph("No se pudo generar la gráfica (sin datos históricos o error).", styles['Italic']))
 
             story.append(Spacer(1, 0.4*inch))
     else:
-        story.append(Paragraph("No hay eventos registrados para generar gráficas.", normalStyle))
+        story.append(Paragraph("No hay eventos registrados para el periodo seleccionado.", normalStyle))
 
     story.append(PageBreak())
 
-    # seccion 3 detalle tabular
+    # --- SECCION 3: DETALLE DE EVENTOS (TABLA) ---
     story.append(Paragraph("3. DETALLE DE EVENTOS", subtitleStyle))
+    story.append(Paragraph("Nota: Las horas mostradas en esta tabla han sido convertidas a horario local (CDMX).", styles['Italic']))
+    story.append(Spacer(1, 0.1*inch))
 
     if eventos:
-        eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'Max PM2.5']]
+        # Headers de tabla
+        eventosData = [['ID', 'Fecha (CDMX)', 'Hora (CDMX)', 'Estatus', 'Max PM2.5']]
+
         for evento in eventos:
+            # Calcular valores locales para la tabla
+            dt_inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
+
+            fecha_local = dt_inicio_mex.strftime("%d/%m/%Y")
+            hora_local = dt_inicio_mex.strftime("%H:%M:%S")
+
             pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "N/A"
+
             eventosData.append([
                 str(evento.get('evento_id', '')),
-                evento.get('fecha_evento', ''),
-                evento.get('hora_inicio', ''),
+                fecha_local,
+                hora_local,
                 evento.get('estatus', '').upper(),
                 pm25
             ])
