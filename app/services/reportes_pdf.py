@@ -49,65 +49,80 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
 def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
     """ Genera una grafica lineal comparando PM2.5 durante el evento vs historico (1 hora antes/despues). """
     try:
-        fecha_evento_str = evento.get('fecha_evento')
-        hora_inicio_str = evento.get('hora_inicio')
-        hora_fin_str = evento.get('hora_fin')
+        fechaEventoStr = evento.get('fecha_evento')
+        horaInicioStr = evento.get('hora_inicio')
+        horaFinStr = evento.get('hora_fin')
 
-        if not fecha_evento_str or not hora_inicio_str:
+        imagenEvento = evento.get('imagen_preview')
+
+        if not fechaEventoStr or not horaInicioStr:
             return None
 
-        fecha_hora_evento = datetime.strptime(f"{fecha_evento_str} {hora_inicio_str}", "%d/%m/%Y %H:%M:%S")
-        fecha_hora_fin_evento = datetime.strptime(f"{fecha_evento_str} {hora_fin_str}", "%d/%m/%Y %H:%M:%S")
+        # obtener fechas de inicio y fin
+        fechaHoraEvento = datetime.strptime(f"{fechaEventoStr} {horaInicioStr}", "%d/%m/%Y %H:%M:%S")
+        fechaHoraFinEvento = datetime.strptime(f"{fechaEventoStr} {horaFinStr}", "%d/%m/%Y %H:%M:%S")
 
-        inicio_ventana = fecha_hora_evento - timedelta(minutes=30)
-        fin_ventana = fecha_hora_evento + timedelta(minutes=30)
+        # definir ventana de tiempo de 30 minutos
+        inicioVentana = fechaHoraEvento - timedelta(minutes=30)
+        finVentana = fechaHoraEvento + timedelta(minutes=30)
 
-        ts_start = int(inicio_ventana.timestamp())
-        ts_end = int(fin_ventana.timestamp())
+        tsStart = int(inicioVentana.timestamp())
+        tsEnd = int(finVentana.timestamp())
 
-        registros = obtener_historico_aire(ts_start, ts_end)
+        registros = obtener_historico_aire(tsStart, tsEnd)
 
         if not registros:
             return None
 
-        registros.sort(key=lambda x: x.hora_medicion)
+        # filtrar registros que tengan valores en 0
+        registrosFiltrados = [
+            r for r in registros
+            if r.pm1p0 > 0 and r.pm2p5 > 0 and r.pm10 > 0
+        ]
 
-        tiempos = [r.hora_medicion for r in registros]
-        valores_pm1 = [r.pm1p0 for r in registros]
-        valores_pm25 = [r.pm2p5 for r in registros]
-        valores_pm10 = [r.pm10 for r in registros]
+        if not registrosFiltrados:
+            return None
+
+        # ordenar registros por hora
+        registrosFiltrados.sort(key=lambda x: x.hora_medicion)
+
+        # extraer datos para grafica
+        tiempos = [r.hora_medicion for r in registrosFiltrados]
+        valoresPm1 = [r.pm1p0 for r in registrosFiltrados]
+        valoresPm25 = [r.pm2p5 for r in registrosFiltrados]
+        valoresPm10 = [r.pm10 for r in registrosFiltrados]
 
         fig, ax = plt.subplots(figsize=(10, 5))
 
-        # Plotear lineas
-        ax.plot(tiempos, valores_pm1, label='PM1 (Muy Fino)', color='#ff6b48', linewidth=2.5, marker='o', markersize=4)
-        ax.plot(tiempos, valores_pm25, label='PM2.5 (Fino)', color='#FF9800', linewidth=2, marker='o', markersize=4)
-        ax.plot(tiempos, valores_pm10, label='PM10 (Grueso)', color='#795548', linewidth=1.5, linestyle='--')
+        # plotear lineas de datos
+        ax.plot(tiempos, valoresPm1, label='PM1 (Muy Fino)', color='#ff6ffb', linewidth=2.5, marker='o', markersize=4)
+        ax.plot(tiempos, valoresPm25, label='PM2.5 (Fino)', color='#FF9800', linewidth=2, marker='o', markersize=4)
+        ax.plot(tiempos, valoresPm10, label='PM10 (Grueso)', color='#795548', linewidth=1.5, linestyle='--')
 
-        # Marcar el momento del evento
-        ax.axvline(x=fecha_hora_evento, color='#D32F2F', linestyle='-', linewidth=2, label='Inicio Detección Fumar')
+        # marcar inicio evento
+        ax.axvline(x=fechaHoraEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Inicio Detección Fumar')
 
-        # Marcar el momento fin del evento
-        ax.axvline(x=fecha_hora_fin_evento, color='#D32F2F', linestyle='-', linewidth=2, label='Fin Detección Fumar')
+        # marcar fin evento
+        ax.axvline(x=fechaHoraFinEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Fin Detección Fumar')
 
-        # Formatear grafica
+        # configurar estilo de grafica
         ax.set_title(f'Impacto en Calidad del Aire - Evento #{evento.get("evento_id")}', fontsize=12, fontweight='bold')
         ax.set_ylabel('Concentración (μg/m³)')
         ax.set_xlabel('Hora')
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-        # Formatear eje X para mostrar horas
+        # formatear eje x
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
         plt.xticks(rotation=45)
 
         plt.tight_layout()
 
-        temp_path = f"/tmp/grafica_comp_{evento.get('evento_id')}_{datetime.now().timestamp()}.png"
-        plt.savefig(temp_path, format='png', bbox_inches='tight', dpi=150)
+        tempPath = f"/tmp/grafica_comp_{evento.get('evento_id')}_{datetime.now().timestamp()}.png"
+        plt.savefig(tempPath, format='png', bbox_inches='tight', dpi=150)
         plt.close()
 
-        return temp_path
+        return tempPath
     except Exception as e:
         print(f"Error generando grafica comparativa: {e}")
         return None
