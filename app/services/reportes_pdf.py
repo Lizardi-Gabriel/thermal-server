@@ -54,6 +54,8 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
         horaInicioStr = evento.get('hora_inicio')
         horaFinStr = evento.get('hora_fin')
         imagenUrl = evento.get('imagen_preview')
+        imagenUrl = imagenUrl.ruta_imagen
+        print(imagenUrl)
 
         if not fechaEventoStr or not horaInicioStr:
             return None
