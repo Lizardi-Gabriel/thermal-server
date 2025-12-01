@@ -123,9 +123,17 @@ def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
         ax.tick_params(axis='x', rotation=45)
 
-        # asegurar limites x cubren el dia o los datos disponibles
+        # asegurar limites x validos para evitar division por cero
         if tiempos:
-            ax.set_xlim(left=min(tiempos), right=max(tiempos))
+            minTime = min(tiempos)
+            maxTime = max(tiempos)
+
+            # verificar si hay un solo punto o rango cero
+            if minTime == maxTime:
+                minTime = minTime - timedelta(minutes=30)
+                maxTime = maxTime + timedelta(minutes=30)
+
+            ax.set_xlim(left=minTime, right=maxTime)
 
         plt.tight_layout()
 
@@ -275,5 +283,3 @@ def generar_reporte_pdf(
 
     doc.build(story)
     return output_path
-
-
