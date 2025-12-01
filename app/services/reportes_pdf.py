@@ -229,8 +229,13 @@ def generar_reporte_pdf(
 
     # Filtramos eventos confirmados que tengan datos de aire altos
     eventos_impacto = [e for e in eventos if e.get('estatus') == 'confirmado']
+
+
     # Limitamos a los ultimos 3 para no saturar el PDF
-    eventos_impacto = eventos_impacto[:3]
+
+    # TODO: s
+
+    #eventos_impacto = eventos_impacto[:3]
 
     if eventos_impacto:
         for evento in eventos_impacto:
@@ -240,13 +245,11 @@ def generar_reporte_pdf(
             grafica_comp_path = generar_grafica_comparativa_historico(evento)
 
             if grafica_comp_path and os.path.exists(grafica_comp_path):
-                print("inin")
                 img_comp = Image(grafica_comp_path, width=6*inch, height=3*inch)
                 story.append(img_comp)
                 story.append(Paragraph("Nota: La línea roja vertical indica el momento exacto de la detección del fumador.", styles['Italic']))
                 story.append(Spacer(1, 0.3*inch))
             else:
-                print("on")
                 story.append(Paragraph("No hay datos históricos suficientes para generar la gráfica comparativa.", styles['Italic']))
     else:
         story.append(Paragraph("No hay eventos confirmados recientes para analizar el impacto histórico.", normal_style))
