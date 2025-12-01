@@ -1,5 +1,6 @@
 import io
 import os
+import urllib.request
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -47,13 +48,12 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
 
 
 def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
-    """ Genera una grafica lineal comparando PM2.5 durante el evento vs historico (1 hora antes/despues). """
+    """ Genera grafica lineal comparando pm2.5 evento vs historico y muestra imagen evidencia. """
     try:
         fechaEventoStr = evento.get('fecha_evento')
         horaInicioStr = evento.get('hora_inicio')
         horaFinStr = evento.get('hora_fin')
-
-        imagenEvento = evento.get('imagen_preview')
+        imagenUrl = evento.get('imagen_preview')
 
         if not fechaEventoStr or not horaInicioStr:
             return None
@@ -92,7 +92,28 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
         valoresPm25 = [r.pm2p5 for r in registrosFiltrados]
         valoresPm10 = [r.pm10 for r in registrosFiltrados]
 
-        fig, ax = plt.subplots(figsize=(10, 5))
+        # descargar imagen si existe
+        imagenArray = None
+        if imagenUrl:
+            try:
+                req = urllib.request.Request(imagenUrl, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response:
+                    imagenData = io.BytesIO(response.read())
+                    imagenArray = plt.imread(imagenData, format='jpg')
+            except Exception as e:
+                print(f"error descargando imagen evento: {e}")
+
+        # configurar figura segun disponibilidad de imagen
+        if imagenArray is not None:
+            # crear dos subplots: izquierda grafica, derecha imagen
+            fig, (ax, axImg) = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [3, 1]})
+
+            # mostrar imagen
+            axImg.imshow(imagenArray)
+            axImg.axis('off')
+            axImg.set_title("Evidencia", fontsize=10, fontweight='bold')
+        else:
+            fig, ax = plt.subplots(figsize=(10, 5))
 
         # plotear lineas de datos
         ax.plot(tiempos, valoresPm1, label='PM1 (Muy Fino)', color='#ff6ffb', linewidth=2.5, marker='o', markersize=4)
@@ -100,10 +121,10 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
         ax.plot(tiempos, valoresPm10, label='PM10 (Grueso)', color='#795548', linewidth=1.5, linestyle='--')
 
         # marcar inicio evento
-        ax.axvline(x=fechaHoraEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Inicio Detección Fumar')
+        ax.axvline(x=fechaHoraEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Inicio Detección')
 
         # marcar fin evento
-        ax.axvline(x=fechaHoraFinEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Fin Detección Fumar')
+        ax.axvline(x=fechaHoraFinEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Fin Detección')
 
         # configurar estilo de grafica
         ax.set_title(f'Impacto en Calidad del Aire - Evento #{evento.get("evento_id")}', fontsize=12, fontweight='bold')
@@ -114,7 +135,7 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
 
         # formatear eje x
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        plt.xticks(rotation=45)
+        ax.tick_params(axis='x', rotation=45)
 
         plt.tight_layout()
 
