@@ -228,7 +228,7 @@ def generar_reporte_pdf(
     # Filtramos eventos confirmados que tengan datos de aire altos
     eventos_impacto = [e for e in eventos if e.get('estatus') == 'confirmado']
     # Limitamos a los ultimos 3 para no saturar el PDF
-    # eventos_impacto = eventos_impacto[:6]
+    eventos_impacto = eventos_impacto[:3]
 
     if eventos_impacto:
         for evento in eventos_impacto:
