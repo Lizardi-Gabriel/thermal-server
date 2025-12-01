@@ -25,14 +25,35 @@ MEX_TZ = pytz.timezone('America/Mexico_City')
 
 
 def convertir_utc_a_mexico(fecha_str: str, hora_str: str) -> datetime:
-    """Convierte fecha y hora string (UTC) a objeto datetime en hora de Mexico."""
+    """
+    Convierte la hora UTC a horario de México, pero PRESERVA la fecha original del evento.
+
+    Ejemplo caso problemático:
+    Entrada: 19/11/2025 00:02:21 (UTC)
+    Conversión normal daría: 18/11/2025 18:02:21 (CDMX) -> Cambia el día.
+
+    Resultado con esta función: 19/11/2025 18:02:21 (CDMX) -> Mantiene el día 19, ajusta la hora.
+    """
     try:
-        # Crear datetime ingenuo (naive) desde los strings
+        # 1. Parsear la fecha original para tenerla de referencia (día/mes/año)
+        dt_original_date = datetime.strptime(fecha_str, "%d/%m/%Y")
+
+        # 2. Crear datetime completo ingenuo y localizarlo en UTC
         dt_naive = datetime.strptime(f"{fecha_str} {hora_str}", "%d/%m/%Y %H:%M:%S")
-        # Localizarlo como UTC
         dt_utc = UTC_TZ.localize(dt_naive)
-        # Convertir a Mexico
-        return dt_utc.astimezone(MEX_TZ)
+
+        # 3. Convertir a hora de México (esto calcula la resta de horas correctamente)
+        dt_mex_calculado = dt_utc.astimezone(MEX_TZ)
+
+        # 4. FORZAR la fecha original combinándola con la hora calculada
+        # Reemplazamos año, mes y día del resultado por los originales
+        dt_final = dt_mex_calculado.replace(
+            year=dt_original_date.year,
+            month=dt_original_date.month,
+            day=dt_original_date.day
+        )
+
+        return dt_final
     except Exception as e:
         print(f"Error convirtiendo fecha: {e}")
         return datetime.now(MEX_TZ)
@@ -82,14 +103,15 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
         if not eventos_del_dia:
             return None
 
-        # 1. Determinar el rango de tiempo necesario para la grafica (basado en hora Mexico)
+        # 1. Determinar el rango de tiempo necesario para la grafica (basado en hora Mexico corregida)
         min_hora_mex = None
         max_hora_mex = None
 
         eventos_procesados = []
 
         for evento in eventos_del_dia:
-            # Convertimos las horas del evento (que vienen en UTC strings) a objetos datetime Mexico
+            # print(f"id evento: {evento.get('evento_id')} - {evento.get('fecha_evento')} - {evento.get('hora_inicio')}")
+            # Convertimos usando la logica corregida (misma fecha, hora ajustada)
             inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
             fin_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_fin'))
 
@@ -111,7 +133,8 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
         start_buffer = min_hora_mex - timedelta(minutes=30)
         end_buffer = max_hora_mex + timedelta(minutes=30)
 
-        # 2. Obtener datos historicos usando timestamps UTC (el servicio espera timestamps absolutos)
+        # 2. Obtener datos historicos usando timestamps
+        # Al usar start_buffer obtenemos los datos de aire correspondientes a ese momento en el tiempo real.
         ts_start = int(start_buffer.timestamp())
         ts_end = int(end_buffer.timestamp())
 
@@ -119,51 +142,48 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
 
         if not registros:
             print(f"DEBUG: No se encontraron registros de aire para el rango {start_buffer} - {end_buffer}")
-            # se puede graficar los cuadros rojos vacios
-            return None
+            # Aun asi intentamos graficar los cuadros rojos si no hay datos de aire
+            # return None # Comentado para permitir ver eventos sin aire si fuera necesario
 
         # Procesar datos para graficar (Convertir timestamps de medicion a Hora Mexico)
-        registros_filtrados = [r for r in registros if r.pm1p0 > 0 and r.pm2p5 > 0 and r.pm10 > 0]
-
-        # Ordenar por tiempo
-        registros_filtrados.sort(key=lambda x: x.hora_medicion)
-
-        # Convertir hora_medicion a datetime Mexico para el eje X
         tiempos_mex = []
         valores_pm1 = []
         valores_pm25 = []
         valores_pm10 = []
 
-        for r in registros_filtrados:
-            # r.hora_medicion es un timestamp o datetime
-            if isinstance(r.hora_medicion, (int, float)):
-                dt_utc = datetime.fromtimestamp(r.hora_medicion, pytz.utc)
-            elif isinstance(r.hora_medicion, datetime):
-                dt_utc = r.hora_medicion if r.hora_medicion.tzinfo else pytz.utc.localize(r.hora_medicion)
-            else:
-                # Formato desconocido
-                continue
+        if registros:
+            registros_filtrados = [r for r in registros if r.pm1p0 > 0 and r.pm2p5 > 0 and r.pm10 > 0]
+            registros_filtrados.sort(key=lambda x: x.hora_medicion)
 
-            dt_mex = dt_utc.astimezone(MEX_TZ)
+            for r in registros_filtrados:
+                if isinstance(r.hora_medicion, (int, float)):
+                    dt_utc = datetime.fromtimestamp(r.hora_medicion, pytz.utc)
+                elif isinstance(r.hora_medicion, datetime):
+                    dt_utc = r.hora_medicion if r.hora_medicion.tzinfo else pytz.utc.localize(r.hora_medicion)
+                else:
+                    continue
 
-            tiempos_mex.append(dt_mex)
-            valores_pm1.append(r.pm1p0)
-            valores_pm25.append(r.pm2p5)
-            valores_pm10.append(r.pm10)
+                dt_mex = dt_utc.astimezone(MEX_TZ)
+
+                tiempos_mex.append(dt_mex)
+                valores_pm1.append(r.pm1p0)
+                valores_pm25.append(r.pm2p5)
+                valores_pm10.append(r.pm10)
 
         # Configurar Grafica
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        # Plotear lineas
-        ax.plot(tiempos_mex, valores_pm1, label='PM1', color='#ff6ffb', linewidth=1, alpha=0.7)
-        ax.plot(tiempos_mex, valores_pm25, label='PM2.5', color='#FF9800', linewidth=2)
-        ax.plot(tiempos_mex, valores_pm10, label='PM10', color='#795548', linewidth=1, linestyle='--')
+        # Plotear lineas si hay datos
+        if tiempos_mex:
+            ax.plot(tiempos_mex, valores_pm1, label='PM1', color='#ff6ffb', linewidth=1, alpha=0.7)
+            ax.plot(tiempos_mex, valores_pm25, label='PM2.5', color='#FF9800', linewidth=2)
+            ax.plot(tiempos_mex, valores_pm10, label='PM10', color='#795548', linewidth=1, linestyle='--')
 
-        # Plotear franjas de eventos (ya convertidos a Mexico)
+        # Plotear franjas de eventos (ya convertidos a Mexico con fecha fija)
         for ev in eventos_procesados:
             ax.axvspan(ev['inicio'], ev['fin'], color='red', alpha=0.3)
             # Etiqueta rotada
-            ax.text(ev['inicio'], ax.get_ylim()[1], f"#{ev['id']}",
+            ax.text(ev['inicio'], ax.get_ylim()[1] if tiempos_mex else 1, f"#{ev['id']}",
                     rotation=90, verticalalignment='bottom', fontsize=8, color='red')
 
         ax.set_title(f'Monitoreo de Calidad del Aire - {fecha_mex_str} (Horario CDMX)', fontsize=12, fontweight='bold')
@@ -266,21 +286,17 @@ def generar_reporte_pdf(
     story.append(Paragraph("Gráficas en horario local (Ciudad de México). El rango visualizado abarca desde 30 minutos antes del primer evento hasta 30 minutos después del último evento del día.", normalStyle))
     story.append(Spacer(1, 0.2*inch))
 
-    # AGRUPAR POR FECHA LOCAL
     eventos_por_dia_local = defaultdict(list)
 
     for ev in eventos:
-        fecha_utc = ev.get('fecha_evento')
-        hora_utc = ev.get('hora_inicio')
-        if fecha_utc and hora_utc:
-            dt_mex = convertir_utc_a_mexico(fecha_utc, hora_utc)
-            fecha_local_str = dt_mex.strftime("%d/%m/%Y")
-
-            # guardar el evento original en la lista de ese dia local
-            eventos_por_dia_local[fecha_local_str].append(ev)
+        # Usamos directamente la fecha string del evento para agrupar
+        # Ya que hemos garantizado que no queremos que cambie de dia.
+        fecha_str_raw = ev.get('fecha_evento')
+        if fecha_str_raw:
+            eventos_por_dia_local[fecha_str_raw].append(ev)
 
     if eventos_por_dia_local:
-        # Ordenar por fecha
+        # Ordenar por fecha string parseada
         dias_ordenados = sorted(eventos_por_dia_local.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y"))
 
         for fecha_str in dias_ordenados:
@@ -306,7 +322,7 @@ def generar_reporte_pdf(
 
     # --- SECCION 3: DETALLE DE EVENTOS (TABLA) ---
     story.append(Paragraph("3. DETALLE DE EVENTOS", subtitleStyle))
-    story.append(Paragraph("Nota: Las horas mostradas en esta tabla han sido convertidas a horario local (CDMX).", styles['Italic']))
+    story.append(Paragraph("Nota: Las horas mostradas en esta tabla han sido ajustadas a horario local (CDMX) manteniendo la fecha de registro.", styles['Italic']))
     story.append(Spacer(1, 0.1*inch))
 
     if eventos:
@@ -314,7 +330,7 @@ def generar_reporte_pdf(
         eventosData = [['ID', 'Fecha (CDMX)', 'Hora (CDMX)', 'Estatus', 'Max PM2.5']]
 
         for evento in eventos:
-            # Calcular valores locales para la tabla
+            # Calcular valores locales para la tabla con la correccion de fecha fija
             dt_inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
 
             fecha_local = dt_inicio_mex.strftime("%d/%m/%Y")
