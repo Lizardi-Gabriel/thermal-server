@@ -1,6 +1,7 @@
 import io
 import os
 import urllib.request
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -18,65 +19,53 @@ from app.services.aire import obtener_historico_aire
 
 matplotlib.use('Agg')
 
-
-def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
+def generar_grafica_eventos_por_estatus(eventosStats: dict) -> str:
+    # generar grafica de pastel para resumen de estatus
     labels = ['Confirmados', 'Descartados', 'Pendientes']
     sizes = [
-        eventos_stats.get('eventos_confirmados', 0),
-        eventos_stats.get('eventos_descartados', 0),
-        eventos_stats.get('eventos_pendientes', 0)
+        eventosStats.get('eventos_confirmados', 0),
+        eventosStats.get('eventos_descartados', 0),
+        eventosStats.get('eventos_pendientes', 0)
     ]
-    colors_chart = ['#4CAF50', '#D32F2F', '#1976D2']
+    colorsChart = ['#4CAF50', '#D32F2F', '#1976D2']
     explode = (0.05, 0.05, 0.05)
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.pie(sizes, explode=explode, labels=labels, colors=colors_chart, autopct='%1.1f%%', shadow=True, startangle=90)
+    ax.pie(sizes, explode=explode, labels=labels, colors=colorsChart, autopct='%1.1f%%', shadow=True, startangle=90)
     ax.axis('equal')
     plt.title('Distribución de Eventos por Estatus', fontsize=14, fontweight='bold')
 
-    img_buffer = io.BytesIO()
-    plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=150)
-    img_buffer.seek(0)
+    imgBuffer = io.BytesIO()
+    plt.savefig(imgBuffer, format='png', bbox_inches='tight', dpi=150)
+    imgBuffer.seek(0)
     plt.close()
 
-    temp_path = f"/tmp/grafica_estatus_{datetime.now().timestamp()}.png"
+    tempPath = f"/tmp/grafica_estatus_{datetime.now().timestamp()}.png"
 
-    with open(temp_path, 'wb') as f:
-        f.write(img_buffer.getvalue())
+    with open(tempPath, 'wb') as f:
+        f.write(imgBuffer.getvalue())
 
-    return temp_path
+    return tempPath
 
 
-def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
-    """ Genera grafica lineal comparando pm2.5 evento vs historico y muestra imagen evidencia. """
+def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional[str]:
+    # generar grafica lineal del dia con marcas de eventos
     try:
-        fechaEventoStr = evento.get('fecha_evento')
-        horaInicioStr = evento.get('hora_inicio')
-        horaFinStr = evento.get('hora_fin')
-        imagenUrl = evento.get('imagen_preview')
-        imagenUrl = imagenUrl.ruta_imagen
-        print(imagenUrl)
+        # definir rango del dia para contexto historico completo
+        fechaBase = datetime.strptime(fechaStr, "%d/%m/%Y")
+        inicioDia = fechaBase.replace(hour=0, minute=0, second=0)
+        finDia = fechaBase.replace(hour=23, minute=59, second=59)
 
-        if not fechaEventoStr or not horaInicioStr:
-            return None
+        tsStart = int(inicioDia.timestamp())
+        tsEnd = int(finDia.timestamp())
 
-        # obtener fechas de inicio y fin
-        fechaHoraEvento = datetime.strptime(f"{fechaEventoStr} {horaInicioStr}", "%d/%m/%Y %H:%M:%S")
-        fechaHoraFinEvento = datetime.strptime(f"{fechaEventoStr} {horaFinStr}", "%d/%m/%Y %H:%M:%S")
-
-        # definir ventana de tiempo de 30 minutos
-        inicioVentana = fechaHoraEvento - timedelta(minutes=30)
-        finVentana = fechaHoraEvento + timedelta(minutes=30)
-
-        tsStart = int(inicioVentana.timestamp())
-        tsEnd = int(finVentana.timestamp())
-
+        # obtener registros de aire para el dia
         registros = obtener_historico_aire(tsStart, tsEnd)
 
         if not registros:
             return None
 
-        # filtrar registros que tengan valores en 0
+        # filtrar registros validos
         registrosFiltrados = [
             r for r in registros
             if r.pm1p0 > 0 and r.pm2p5 > 0 and r.pm10 > 0
@@ -85,199 +74,205 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
         if not registrosFiltrados:
             return None
 
-        # ordenar registros por hora
         registrosFiltrados.sort(key=lambda x: x.hora_medicion)
 
-        # extraer datos para grafica
         tiempos = [r.hora_medicion for r in registrosFiltrados]
         valoresPm1 = [r.pm1p0 for r in registrosFiltrados]
         valoresPm25 = [r.pm2p5 for r in registrosFiltrados]
         valoresPm10 = [r.pm10 for r in registrosFiltrados]
 
-        # descargar imagen si existe
-        imagenArray = None
-        if imagenUrl:
-            try:
-                req = urllib.request.Request(imagenUrl, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req) as response:
-                    imagenData = io.BytesIO(response.read())
-                    imagenArray = plt.imread(imagenData, format='jpg')
-            except Exception as e:
-                print(f"error descargando imagen evento: {e}")
+        fig, ax = plt.subplots(figsize=(12, 6))
 
-        # configurar figura segun disponibilidad de imagen
-        if imagenArray is not None:
-            # crear dos subplots: izquierda grafica, derecha imagen
-            fig, (ax, axImg) = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [3, 1]})
+        # plotear lineas de historico
+        ax.plot(tiempos, valoresPm1, label='PM1', color='#ff6ffb', linewidth=1, alpha=0.7)
+        ax.plot(tiempos, valoresPm25, label='PM2.5', color='#FF9800', linewidth=2)
+        ax.plot(tiempos, valoresPm10, label='PM10', color='#795548', linewidth=1, linestyle='--')
 
-            # mostrar imagen
-            axImg.imshow(imagenArray)
-            axImg.axis('off')
-            axImg.set_title("Evidencia", fontsize=10, fontweight='bold')
-        else:
-            fig, ax = plt.subplots(figsize=(10, 5))
+        # iterar eventos para pintar franjas de duracion
+        for evento in eventosDelDia:
+            horaInicio = evento.get('hora_inicio')
+            horaFin = evento.get('hora_fin')
+            eventoId = evento.get('evento_id')
 
-        # plotear lineas de datos
-        ax.plot(tiempos, valoresPm1, label='PM1 (Muy Fino)', color='#ff6ffb', linewidth=2.5, marker='o', markersize=4)
-        ax.plot(tiempos, valoresPm25, label='PM2.5 (Fino)', color='#FF9800', linewidth=2, marker='o', markersize=4)
-        ax.plot(tiempos, valoresPm10, label='PM10 (Grueso)', color='#795548', linewidth=1.5, linestyle='--')
+            if horaInicio and horaFin:
+                dtInicio = datetime.strptime(f"{fechaStr} {horaInicio}", "%d/%m/%Y %H:%M:%S")
+                dtFin = datetime.strptime(f"{fechaStr} {horaFin}", "%d/%m/%Y %H:%M:%S")
 
-        # marcar inicio evento
-        ax.axvline(x=fechaHoraEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Inicio Detección')
+                # pintar area sombreada para el evento
+                ax.axvspan(dtInicio, dtFin, color='red', alpha=0.3)
 
-        # marcar fin evento
-        ax.axvline(x=fechaHoraFinEvento, color='#D32F2F', linestyle='-', linewidth=2, label='Fin Detección')
+                # etiquetar el evento en la parte superior
+                ax.text(dtInicio, ax.get_ylim()[1], f"#{eventoId}", rotation=90, verticalalignment='bottom', fontsize=8)
 
-        # configurar estilo de grafica
-        ax.set_title(f'Impacto en Calidad del Aire - Evento #{evento.get("evento_id")}', fontsize=12, fontweight='bold')
+        ax.set_title(f'Monitoreo de Calidad del Aire - {fechaStr}', fontsize=12, fontweight='bold')
         ax.set_ylabel('Concentración (μg/m³)')
         ax.set_xlabel('Hora')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
 
-        # formatear eje x
+        # configurar leyenda y grid
+        from matplotlib.lines import Line2D
+        customLines = [
+            Line2D([0], [0], color='#ff6ffb', lw=1),
+            Line2D([0], [0], color='#FF9800', lw=2),
+            Line2D([0], [0], color='#795548', lw=1, linestyle='--'),
+            matplotlib.patches.Patch(facecolor='red', edgecolor='red', alpha=0.3, label='Evento Detectado')
+        ]
+        ax.legend(customLines, ['PM1', 'PM2.5', 'PM10', 'Evento'], loc='upper right')
+
+        ax.grid(True, alpha=0.3)
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
         ax.tick_params(axis='x', rotation=45)
 
+        # asegurar limites x cubren el dia o los datos disponibles
+        if tiempos:
+            ax.set_xlim(left=min(tiempos), right=max(tiempos))
+
         plt.tight_layout()
 
-        tempPath = f"/tmp/grafica_comp_{evento.get('evento_id')}_{datetime.now().timestamp()}.png"
+        tempPath = f"/tmp/grafica_dia_{fechaBase.strftime('%Y%m%d')}_{datetime.now().timestamp()}.png"
         plt.savefig(tempPath, format='png', bbox_inches='tight', dpi=150)
         plt.close()
 
         return tempPath
+
     except Exception as e:
-        print(f"Error generando grafica comparativa: {e}")
+        print(f"error generando grafica diaria: {e}")
         return None
 
 
 def generar_reporte_pdf(
         estadisticas: dict,
         eventos: List[dict],
-        fecha_inicio: Optional[str] = None,
-        fecha_fin: Optional[str] = None,
-        output_path: str = "/tmp/reporte.pdf"
+        fechaInicio: Optional[str] = None,
+        fechaFin: Optional[str] = None,
+        outputPath: str = "/tmp/reporte.pdf"
 ) -> str:
-    doc = SimpleDocTemplate(output_path, pagesize=letter,rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    # inicializar documento pdf
+    doc = SimpleDocTemplate(outputPath, pagesize=letter, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
     story = []
     styles = getSampleStyleSheet()
 
-    color_principal = colors.HexColor('#263238')
-    color_secundario = colors.HexColor('#546E7A')
-    color_texto_cabecera = colors.whitesmoke
+    colorPrincipal = colors.HexColor('#263238')
+    colorSecundario = colors.HexColor('#546E7A')
+    colorTextoCabecera = colors.whitesmoke
 
-    title_style = ParagraphStyle(
+    titleStyle = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=24,
-        textColor=color_principal,
+        textColor=colorPrincipal,
         spaceAfter=30,
         alignment=TA_CENTER,
         fontName='Helvetica-Bold'
     )
 
-    subtitle_style = ParagraphStyle(
+    subtitleStyle = ParagraphStyle(
         'CustomSubtitle',
         parent=styles['Heading2'],
         fontSize=16,
-        textColor=color_secundario,
+        textColor=colorSecundario,
         spaceAfter=12,
         spaceBefore=12,
         fontName='Helvetica-Bold'
     )
 
-    normal_style = styles['BodyText']
-    normal_style.alignment = TA_LEFT
+    normalStyle = styles['BodyText']
+    normalStyle.alignment = TA_LEFT
 
+    # agregar portada y resumen
     story.append(Spacer(1, 1.5*inch))
-    story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", title_style))
+    story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", titleStyle))
     story.append(Spacer(1, 0.3*inch))
-    fecha_reporte = datetime.now().strftime("%d/%m/%Y %H:%M")
-    story.append(Paragraph(f"Fecha de generación: {fecha_reporte}", styles['Normal']))
-    if fecha_inicio and fecha_fin:
-        story.append(Paragraph(f"Período: {fecha_inicio} a {fecha_fin}", styles['Normal']))
+    fechaReporte = datetime.now().strftime("%d/%m/%Y %H:%M")
+    story.append(Paragraph(f"Fecha de generación: {fechaReporte}", styles['Normal']))
+    if fechaInicio and fechaFin:
+        story.append(Paragraph(f"Período: {fechaInicio} a {fechaFin}", styles['Normal']))
     story.append(PageBreak())
 
-    story.append(Paragraph("1. RESUMEN EJECUTIVO", subtitle_style))
-    resumen_data = [
+    # seccion 1 resumen ejecutivo
+    story.append(Paragraph("1. RESUMEN EJECUTIVO", subtitleStyle))
+    resumenData = [
         ['Métrica', 'Valor'],
         ['Total de Eventos', str(estadisticas.get('total_eventos', 0))],
         ['Eventos Pendientes', str(estadisticas.get('eventos_pendientes', 0))],
         ['Eventos Confirmados', str(estadisticas.get('eventos_confirmados', 0))],
         ['Total de Detecciones', str(estadisticas.get('total_detecciones', 0))],
     ]
-    resumen_table = Table(resumen_data, colWidths=[3*inch, 2*inch])
-    resumen_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), color_principal),
-        ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
+    resumenTable = Table(resumenData, colWidths=[3*inch, 2*inch])
+    resumenTable.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
     ]))
-    story.append(resumen_table)
+    story.append(resumenTable)
     story.append(Spacer(1, 0.3*inch))
 
-    # Grafica de pastel
-    grafica_estatus_path = generar_grafica_eventos_por_estatus(estadisticas)
-    if grafica_estatus_path and os.path.exists(grafica_estatus_path):
-        img = Image(grafica_estatus_path, width=5*inch, height=3.75*inch)
+    graficaEstatusPath = generar_grafica_eventos_por_estatus(estadisticas)
+    if graficaEstatusPath and os.path.exists(graficaEstatusPath):
+        img = Image(graficaEstatusPath, width=5*inch, height=3.75*inch)
         story.append(img)
     story.append(PageBreak())
 
-    story.append(Paragraph("2. ANÁLISIS DE IMPACTO AMBIENTAL", subtitle_style))
-    story.append(Paragraph("A continuación se muestra el comportamiento de las partículas PM1, PM2.5 y PM10 antes, durante y después de los eventos confirmados más relevantes.", normal_style))
+    # seccion 2 analisis diario
+    story.append(Paragraph("2. ANÁLISIS DIARIO DE CALIDAD DEL AIRE", subtitleStyle))
+    story.append(Paragraph("Visualización del comportamiento de partículas PM1, PM2.5 y PM10 agrupado por día. Las áreas sombreadas en rojo indican la duración de los eventos detectados.", normalStyle))
     story.append(Spacer(1, 0.2*inch))
 
-    # Filtramos eventos confirmados que tengan datos de aire altos
-    eventos_impacto = [e for e in eventos if e.get('estatus') == 'confirmado']
+    # agrupar eventos por fecha
+    eventosPorDia = defaultdict(list)
+    for ev in eventos:
+        fecha = ev.get('fecha_evento')
+        if fecha:
+            eventosPorDia[fecha].append(ev)
 
+    if eventosPorDia:
+        # iterar fechas ordenadas
+        for fechaStr in sorted(eventosPorDia.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y")):
+            eventosDelDia = eventosPorDia[fechaStr]
 
-    # Limitamos a los ultimos 3 para no saturar el PDF
+            story.append(Paragraph(f"Día: {fechaStr}", styles['Heading3']))
+            story.append(Paragraph(f"Eventos detectados: {len(eventosDelDia)}", styles['Normal']))
 
-    # TODO: s
+            # generar grafica unica por dia
+            graficaDiaPath = generar_grafica_diaria(fechaStr, eventosDelDia)
 
-    #eventos_impacto = eventos_impacto[:3]
-
-    if eventos_impacto:
-        for evento in eventos_impacto:
-            story.append(Paragraph(f"Evento #{evento.get('evento_id')} - {evento.get('fecha_evento')}", styles['Heading3']))
-
-            # Generar grafica comparativa
-            grafica_comp_path = generar_grafica_comparativa_historico(evento)
-
-            if grafica_comp_path and os.path.exists(grafica_comp_path):
-                img_comp = Image(grafica_comp_path, width=6*inch, height=3*inch)
-                story.append(img_comp)
-                story.append(Paragraph("Nota: La línea roja vertical indica el momento exacto de la detección del fumador.", styles['Italic']))
-                story.append(Spacer(1, 0.3*inch))
+            if graficaDiaPath and os.path.exists(graficaDiaPath):
+                imgDia = Image(graficaDiaPath, width=7*inch, height=3.5*inch)
+                story.append(imgDia)
             else:
-                story.append(Paragraph("No hay datos históricos suficientes para generar la gráfica comparativa.", styles['Italic']))
+                story.append(Paragraph("No hay datos históricos disponibles para este día.", styles['Italic']))
+
+            story.append(Spacer(1, 0.4*inch))
     else:
-        story.append(Paragraph("No hay eventos confirmados recientes para analizar el impacto histórico.", normal_style))
+        story.append(Paragraph("No hay eventos registrados para generar gráficas.", normalStyle))
 
     story.append(PageBreak())
 
-    story.append(Paragraph("3. DETALLE DE EVENTOS", subtitle_style))
+    # seccion 3 detalle tabular
+    story.append(Paragraph("3. DETALLE DE EVENTOS", subtitleStyle))
 
-    # TODO: poner contador, y detalles de los eventos pm1, pm2.5 y pm10 también
     if eventos:
-        eventos_data = [['ID', 'Fecha', 'Estatus', 'Max PM2.5', 'Operador']]
+        eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'Max PM2.5']]
         for evento in eventos:
-            operador = evento.get('usuario', {}).get('nombre_usuario', 'N/A') if evento.get('usuario') else 'N/A'
             pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "N/A"
-            eventos_data.append([
+            eventosData.append([
                 str(evento.get('evento_id', '')),
                 evento.get('fecha_evento', ''),
+                evento.get('hora_inicio', ''),
                 evento.get('estatus', '').upper(),
-                pm25,
-                operador
+                pm25
             ])
-        eventos_table = Table(eventos_data, colWidths=[0.6*inch, 1.2*inch, 1.2*inch, 1.2*inch, 2*inch])
-        eventos_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), color_principal),
-            ('TEXTCOLOR', (0, 0), (-1, 0), color_texto_cabecera),
+
+        eventosTable = Table(eventosData, colWidths=[0.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.5*inch])
+        eventosTable.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ]))
-        story.append(eventos_table)
+        story.append(eventosTable)
 
     doc.build(story)
-    return output_path
+    return outputPath
+
+
