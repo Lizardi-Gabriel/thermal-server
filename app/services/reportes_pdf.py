@@ -28,13 +28,22 @@ def generar_grafica_eventos_por_estatus(eventosStats: dict) -> str:
         eventosStats.get('eventos_descartados', 0),
         eventosStats.get('eventos_pendientes', 0)
     ]
-    colorsChart = ['#4CAF50', '#D32F2F', '#1976D2']
-    explode = (0.05, 0.05, 0.05)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.pie(sizes, explode=explode, labels=labels, colors=colorsChart, autopct='%1.1f%%', shadow=True, startangle=90)
-    ax.axis('equal')
-    plt.title('Distribución de Eventos por Estatus', fontsize=14, fontweight='bold')
+    # validar si hay datos para graficar
+    if sum(sizes) == 0:
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.text(0.5, 0.5, 'Sin eventos registrados',
+                horizontalalignment='center', verticalalignment='center',
+                transform=ax.transAxes, fontsize=14)
+        ax.axis('off')
+    else:
+        colorsChart = ['#4CAF50', '#D32F2F', '#1976D2']
+        explode = (0.05, 0.05, 0.05)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.pie(sizes, explode=explode, labels=labels, colors=colorsChart, autopct='%1.1f%%', shadow=True, startangle=90)
+        ax.axis('equal')
+        plt.title('Distribución de Eventos por Estatus', fontsize=14, fontweight='bold')
 
     imgBuffer = io.BytesIO()
     plt.savefig(imgBuffer, format='png', bbox_inches='tight', dpi=150)
@@ -64,6 +73,7 @@ def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional
         registros = obtener_historico_aire(tsStart, tsEnd)
 
         if not registros:
+            print(f"DEBUG: No se encontraron registros para {fechaStr}")
             return None
 
         # filtrar registros validos
@@ -73,9 +83,13 @@ def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional
         ]
 
         if not registrosFiltrados:
+            print(f"DEBUG: Registros encontrados pero filtrados por valores cero para {fechaStr}")
             return None
 
         registrosFiltrados.sort(key=lambda x: x.hora_medicion)
+
+        # diagnostico de datos
+        print(f"DEBUG: Graficando {len(registrosFiltrados)} puntos para {fechaStr}")
 
         tiempos = [r.hora_medicion for r in registrosFiltrados]
         valoresPm1 = [r.pm1p0 for r in registrosFiltrados]
@@ -96,14 +110,20 @@ def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional
             eventoId = evento.get('evento_id')
 
             if horaInicio and horaFin:
-                dtInicio = datetime.strptime(f"{fechaStr} {horaInicio}", "%d/%m/%Y %H:%M:%S")
-                dtFin = datetime.strptime(f"{fechaStr} {horaFin}", "%d/%m/%Y %H:%M:%S")
+                try:
+                    dtInicio = datetime.strptime(f"{fechaStr} {horaInicio}", "%d/%m/%Y %H:%M:%S")
+                    dtFin = datetime.strptime(f"{fechaStr} {horaFin}", "%d/%m/%Y %H:%M:%S")
 
-                # pintar area sombreada para el evento
-                ax.axvspan(dtInicio, dtFin, color='red', alpha=0.3)
-
-                # etiquetar el evento en la parte superior
-                ax.text(dtInicio, ax.get_ylim()[1], f"#{eventoId}", rotation=90, verticalalignment='bottom', fontsize=8)
+                    # validar que el intervalo sea valido > 0 para evitar error de vertices
+                    if dtFin > dtInicio:
+                        # pintar area sombreada para el evento
+                        ax.axvspan(dtInicio, dtFin, color='red', alpha=0.3)
+                        # etiquetar el evento en la parte superior
+                        ax.text(dtInicio, ax.get_ylim()[1], f"#{eventoId}", rotation=90, verticalalignment='bottom', fontsize=8)
+                    else:
+                        print(f"DEBUG: Evento {eventoId} ignorado por duracion invalida (Inicio: {dtInicio}, Fin: {dtFin})")
+                except Exception as evErr:
+                    print(f"DEBUG: Error procesando evento {eventoId}: {evErr}")
 
         ax.set_title(f'Monitoreo de Calidad del Aire - {fechaStr}', fontsize=12, fontweight='bold')
         ax.set_ylabel('Concentración (μg/m³)')
@@ -145,6 +165,8 @@ def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional
 
     except Exception as e:
         print(f"error generando grafica diaria: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
