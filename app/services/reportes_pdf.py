@@ -1,18 +1,22 @@
+import io
+import os
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+import matplotlib
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use('Agg')
-import io
-import os
-from typing import List, Optional
 
 from app.services.aire import obtener_historico_aire
+
+matplotlib.use('Agg')
+
 
 def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
     labels = ['Confirmados', 'Descartados', 'Pendientes']
@@ -25,8 +29,7 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
     explode = (0.05, 0.05, 0.05)
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.pie(sizes, explode=explode, labels=labels, colors=colors_chart,
-           autopct='%1.1f%%', shadow=True, startangle=90)
+    ax.pie(sizes, explode=explode, labels=labels, colors=colors_chart, autopct='%1.1f%%', shadow=True, startangle=90)
     ax.axis('equal')
     plt.title('Distribución de Eventos por Estatus', fontsize=14, fontweight='bold')
 
@@ -36,6 +39,7 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
     plt.close()
 
     temp_path = f"/tmp/grafica_estatus_{datetime.now().timestamp()}.png"
+
     with open(temp_path, 'wb') as f:
         f.write(img_buffer.getvalue())
 
@@ -43,17 +47,17 @@ def generar_grafica_eventos_por_estatus(eventos_stats: dict) -> str:
 
 
 def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
-    """
-    Genera una grafica lineal comparando PM2.5 durante el evento vs historico (1 hora antes/despues).
-    """
+    """ Genera una grafica lineal comparando PM2.5 durante el evento vs historico (1 hora antes/despues). """
     try:
         fecha_evento_str = evento.get('fecha_evento')
         hora_inicio_str = evento.get('hora_inicio')
+        hora_fin_str = evento.get('hora_fin')
 
         if not fecha_evento_str or not hora_inicio_str:
             return None
 
         fecha_hora_evento = datetime.strptime(f"{fecha_evento_str} {hora_inicio_str}", "%d/%m/%Y %H:%M:%S")
+        fecha_hora_fin_evento = datetime.strptime(f"{fecha_evento_str} {hora_fin_str}", "%d/%m/%Y %H:%M:%S")
 
         inicio_ventana = fecha_hora_evento - timedelta(minutes=30)
         fin_ventana = fecha_hora_evento + timedelta(minutes=30)
@@ -69,17 +73,22 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
         registros.sort(key=lambda x: x.hora_medicion)
 
         tiempos = [r.hora_medicion for r in registros]
+        valores_pm1 = [r.pm1p0 for r in registros]
         valores_pm25 = [r.pm2p5 for r in registros]
         valores_pm10 = [r.pm10 for r in registros]
 
         fig, ax = plt.subplots(figsize=(10, 5))
 
         # Plotear lineas
+        ax.plot(tiempos, valores_pm1, label='PM1 (Muy Fino)', color='#ff6b48', linewidth=2.5, marker='o', markersize=4)
         ax.plot(tiempos, valores_pm25, label='PM2.5 (Fino)', color='#FF9800', linewidth=2, marker='o', markersize=4)
         ax.plot(tiempos, valores_pm10, label='PM10 (Grueso)', color='#795548', linewidth=1.5, linestyle='--')
 
         # Marcar el momento del evento
-        ax.axvline(x=fecha_hora_evento, color='#D32F2F', linestyle='-', linewidth=2, label='Detección Fumar')
+        ax.axvline(x=fecha_hora_evento, color='#D32F2F', linestyle='-', linewidth=2, label='Inicio Detección Fumar')
+
+        # Marcar el momento fin del evento
+        ax.axvline(x=fecha_hora_fin_evento, color='#D32F2F', linestyle='-', linewidth=2, label='Fin Detección Fumar')
 
         # Formatear grafica
         ax.set_title(f'Impacto en Calidad del Aire - Evento #{evento.get("evento_id")}', fontsize=12, fontweight='bold')
@@ -89,7 +98,6 @@ def generar_grafica_comparativa_historico(evento: dict) -> Optional[str]:
         ax.grid(True, alpha=0.3)
 
         # Formatear eje X para mostrar horas
-        import matplotlib.dates as mdates
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
         plt.xticks(rotation=45)
 
@@ -112,10 +120,7 @@ def generar_reporte_pdf(
         fecha_fin: Optional[str] = None,
         output_path: str = "/tmp/reporte.pdf"
 ) -> str:
-    doc = SimpleDocTemplate(output_path, pagesize=letter,
-                            rightMargin=0.5*inch, leftMargin=0.5*inch,
-                            topMargin=0.5*inch, bottomMargin=0.5*inch)
-
+    doc = SimpleDocTemplate(output_path, pagesize=letter,rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
     story = []
     styles = getSampleStyleSheet()
 
@@ -181,13 +186,13 @@ def generar_reporte_pdf(
     story.append(PageBreak())
 
     story.append(Paragraph("2. ANÁLISIS DE IMPACTO AMBIENTAL", subtitle_style))
-    story.append(Paragraph("A continuación se muestra el comportamiento de las partículas PM2.5 y PM10 antes, durante y después de los eventos confirmados más relevantes.", normal_style))
+    story.append(Paragraph("A continuación se muestra el comportamiento de las partículas PM1, PM2.5 y PM10 antes, durante y después de los eventos confirmados más relevantes.", normal_style))
     story.append(Spacer(1, 0.2*inch))
 
     # Filtramos eventos confirmados que tengan datos de aire altos
     eventos_impacto = [e for e in eventos if e.get('estatus') == 'confirmado']
     # Limitamos a los ultimos 3 para no saturar el PDF
-    eventos_impacto = eventos_impacto[:3]
+    # eventos_impacto = eventos_impacto[:6]
 
     if eventos_impacto:
         for evento in eventos_impacto:
@@ -211,6 +216,8 @@ def generar_reporte_pdf(
     story.append(PageBreak())
 
     story.append(Paragraph("3. DETALLE DE EVENTOS", subtitle_style))
+
+    # TODO: poner contador, y detalles de los eventos pm1, pm2.5 y pm10 también
     if eventos:
         eventos_data = [['ID', 'Fecha', 'Estatus', 'Max PM2.5', 'Operador']]
         for evento in eventos:
