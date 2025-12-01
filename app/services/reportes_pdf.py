@@ -1,6 +1,5 @@
 import io
 import os
-import traceback
 import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -16,7 +15,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
 
-# importar servicio de aire
 from app.services.aire import obtener_historico_aire
 
 matplotlib.use('Agg')
@@ -24,42 +22,37 @@ matplotlib.use('Agg')
 
 def generar_grafica_eventos_por_estatus(eventosStats: dict) -> str:
     # generar grafica de pastel para resumen de estatus
-    try:
-        labels = ['Confirmados', 'Descartados', 'Pendientes']
-        sizes = [
-            eventosStats.get('eventos_confirmados', 0),
-            eventosStats.get('eventos_descartados', 0),
-            eventosStats.get('eventos_pendientes', 0)
-        ]
-        colorsChart = ['#4CAF50', '#D32F2F', '#1976D2']
-        explode = (0.05, 0.05, 0.05)
+    labels = ['Confirmados', 'Descartados', 'Pendientes']
+    sizes = [
+        eventosStats.get('eventos_confirmados', 0),
+        eventosStats.get('eventos_descartados', 0),
+        eventosStats.get('eventos_pendientes', 0)
+    ]
+    colorsChart = ['#4CAF50', '#D32F2F', '#1976D2']
+    explode = (0.05, 0.05, 0.05)
 
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.pie(sizes, explode=explode, labels=labels, colors=colorsChart, autopct='%1.1f%%', shadow=True, startangle=90)
-        ax.axis('equal')
-        plt.title('Distribución de Eventos por Estatus', fontsize=14, fontweight='bold')
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.pie(sizes, explode=explode, labels=labels, colors=colorsChart, autopct='%1.1f%%', shadow=True, startangle=90)
+    ax.axis('equal')
+    plt.title('Distribución de Eventos por Estatus', fontsize=14, fontweight='bold')
 
-        imgBuffer = io.BytesIO()
-        plt.savefig(imgBuffer, format='png', bbox_inches='tight', dpi=150)
-        imgBuffer.seek(0)
-        plt.close()
+    imgBuffer = io.BytesIO()
+    plt.savefig(imgBuffer, format='png', bbox_inches='tight', dpi=150)
+    imgBuffer.seek(0)
+    plt.close()
 
-        tempPath = f"/tmp/grafica_estatus_{datetime.now().timestamp()}.png"
+    tempPath = f"/tmp/grafica_estatus_{datetime.now().timestamp()}.png"
 
-        with open(tempPath, 'wb') as f:
-            f.write(imgBuffer.getvalue())
+    with open(tempPath, 'wb') as f:
+        f.write(imgBuffer.getvalue())
 
-        return tempPath
-    except Exception as e:
-        print(f"Error generando grafica pastel: {e}")
-        traceback.print_exc()
-        return ""
+    return tempPath
 
 
 def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional[str]:
-    # generar grafica lineal de todo el dia con marcas de eventos
+    # generar grafica lineal del dia con marcas de eventos
     try:
-        # definir rango de todo el dia para contexto historico completo
+        # definir rango del dia para contexto historico completo
         fechaBase = datetime.strptime(fechaStr, "%d/%m/%Y")
         inicioDia = fechaBase.replace(hour=0, minute=0, second=0)
         finDia = fechaBase.replace(hour=23, minute=59, second=59)
@@ -67,7 +60,7 @@ def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional
         tsStart = int(inicioDia.timestamp())
         tsEnd = int(finDia.timestamp())
 
-        # obtener registros de aire para todo el dia
+        # obtener registros de aire para el dia
         registros = obtener_historico_aire(tsStart, tsEnd)
 
         if not registros:
@@ -143,151 +136,144 @@ def generar_grafica_diaria(fechaStr: str, eventosDelDia: List[dict]) -> Optional
         return tempPath
 
     except Exception as e:
-        print(f"Error generando grafica diaria: {e}")
-        traceback.print_exc()
+        print(f"error generando grafica diaria: {e}")
         return None
 
 
 def generar_reporte_pdf(
         estadisticas: dict,
         eventos: List[dict],
-        fechaInicio: Optional[str] = None,
-        fechaFin: Optional[str] = None,
-        outputPath: str = "/tmp/reporte.pdf"
+        fecha_inicio: Optional[str] = None,
+        fecha_fin: Optional[str] = None,
+        output_path: str = "/tmp/reporte.pdf"
 ) -> str:
-    try:
-        # inicializar documento pdf
-        doc = SimpleDocTemplate(outputPath, pagesize=letter, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
-        story = []
-        styles = getSampleStyleSheet()
+    # inicializar documento pdf
+    doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
 
-        colorPrincipal = colors.HexColor('#263238')
-        colorSecundario = colors.HexColor('#546E7A')
-        colorTextoCabecera = colors.whitesmoke
+    colorPrincipal = colors.HexColor('#263238')
+    colorSecundario = colors.HexColor('#546E7A')
+    colorTextoCabecera = colors.whitesmoke
 
-        titleStyle = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=24,
-            textColor=colorPrincipal,
-            spaceAfter=30,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold'
-        )
+    titleStyle = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colorPrincipal,
+        spaceAfter=30,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
 
-        subtitleStyle = ParagraphStyle(
-            'CustomSubtitle',
-            parent=styles['Heading2'],
-            fontSize=16,
-            textColor=colorSecundario,
-            spaceAfter=12,
-            spaceBefore=12,
-            fontName='Helvetica-Bold'
-        )
+    subtitleStyle = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colorSecundario,
+        spaceAfter=12,
+        spaceBefore=12,
+        fontName='Helvetica-Bold'
+    )
 
-        normalStyle = styles['BodyText']
-        normalStyle.alignment = TA_LEFT
+    normalStyle = styles['BodyText']
+    normalStyle.alignment = TA_LEFT
 
-        # agregar portada y resumen
-        story.append(Spacer(1, 1.5*inch))
-        story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", titleStyle))
-        story.append(Spacer(1, 0.3*inch))
-        fechaReporte = datetime.now().strftime("%d/%m/%Y %H:%M")
-        story.append(Paragraph(f"Fecha de generación: {fechaReporte}", styles['Normal']))
-        if fechaInicio and fechaFin:
-            story.append(Paragraph(f"Período: {fechaInicio} a {fechaFin}", styles['Normal']))
-        story.append(PageBreak())
+    # agregar portada y resumen
+    story.append(Spacer(1, 1.5*inch))
+    story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", titleStyle))
+    story.append(Spacer(1, 0.3*inch))
+    fechaReporte = datetime.now().strftime("%d/%m/%Y %H:%M")
+    story.append(Paragraph(f"Fecha de generación: {fechaReporte}", styles['Normal']))
+    if fecha_inicio and fecha_fin:
+        story.append(Paragraph(f"Período: {fecha_inicio} a {fecha_fin}", styles['Normal']))
+    story.append(PageBreak())
 
-        # seccion 1 resumen ejecutivo
-        story.append(Paragraph("1. RESUMEN EJECUTIVO", subtitleStyle))
-        resumenData = [
-            ['Métrica', 'Valor'],
-            ['Total de Eventos', str(estadisticas.get('total_eventos', 0))],
-            ['Eventos Pendientes', str(estadisticas.get('eventos_pendientes', 0))],
-            ['Eventos Confirmados', str(estadisticas.get('eventos_confirmados', 0))],
-            ['Total de Detecciones', str(estadisticas.get('total_detecciones', 0))],
-        ]
-        resumenTable = Table(resumenData, colWidths=[3*inch, 2*inch])
-        resumenTable.setStyle(TableStyle([
+    # seccion 1 resumen ejecutivo
+    story.append(Paragraph("1. RESUMEN EJECUTIVO", subtitleStyle))
+    resumenData = [
+        ['Métrica', 'Valor'],
+        ['Total de Eventos', str(estadisticas.get('total_eventos', 0))],
+        ['Eventos Pendientes', str(estadisticas.get('eventos_pendientes', 0))],
+        ['Eventos Confirmados', str(estadisticas.get('eventos_confirmados', 0))],
+        ['Total de Detecciones', str(estadisticas.get('total_detecciones', 0))],
+    ]
+    resumenTable = Table(resumenData, colWidths=[3*inch, 2*inch])
+    resumenTable.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    story.append(resumenTable)
+    story.append(Spacer(1, 0.3*inch))
+
+    graficaEstatusPath = generar_grafica_eventos_por_estatus(estadisticas)
+    if graficaEstatusPath and os.path.exists(graficaEstatusPath):
+        img = Image(graficaEstatusPath, width=5*inch, height=3.75*inch)
+        story.append(img)
+    story.append(PageBreak())
+
+    # seccion 2 analisis diario
+    story.append(Paragraph("2. ANÁLISIS DIARIO DE CALIDAD DEL AIRE", subtitleStyle))
+    story.append(Paragraph("Visualización del comportamiento de partículas PM1, PM2.5 y PM10 agrupado por día. Las áreas sombreadas en rojo indican la duración de los eventos detectados.", normalStyle))
+    story.append(Spacer(1, 0.2*inch))
+
+    # agrupar eventos por fecha
+    eventosPorDia = defaultdict(list)
+    for ev in eventos:
+        fecha = ev.get('fecha_evento')
+        if fecha:
+            eventosPorDia[fecha].append(ev)
+
+    if eventosPorDia:
+        # iterar fechas ordenadas
+        for fechaStr in sorted(eventosPorDia.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y")):
+            eventosDelDia = eventosPorDia[fechaStr]
+
+            story.append(Paragraph(f"Día: {fechaStr}", styles['Heading3']))
+            story.append(Paragraph(f"Eventos detectados: {len(eventosDelDia)}", styles['Normal']))
+
+            # generar grafica unica por dia
+            graficaDiaPath = generar_grafica_diaria(fechaStr, eventosDelDia)
+
+            if graficaDiaPath and os.path.exists(graficaDiaPath):
+                imgDia = Image(graficaDiaPath, width=7*inch, height=3.5*inch)
+                story.append(imgDia)
+            else:
+                story.append(Paragraph("No hay datos históricos disponibles para este día.", styles['Italic']))
+
+            story.append(Spacer(1, 0.4*inch))
+    else:
+        story.append(Paragraph("No hay eventos registrados para generar gráficas.", normalStyle))
+
+    story.append(PageBreak())
+
+    # seccion 3 detalle tabular
+    story.append(Paragraph("3. DETALLE DE EVENTOS", subtitleStyle))
+
+    if eventos:
+        eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'Max PM2.5']]
+        for evento in eventos:
+            pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "N/A"
+            eventosData.append([
+                str(evento.get('evento_id', '')),
+                evento.get('fecha_evento', ''),
+                evento.get('hora_inicio', ''),
+                evento.get('estatus', '').upper(),
+                pm25
+            ])
+
+        eventosTable = Table(eventosData, colWidths=[0.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.5*inch])
+        eventosTable.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
             ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ]))
-        story.append(resumenTable)
-        story.append(Spacer(1, 0.3*inch))
+        story.append(eventosTable)
 
-        graficaEstatusPath = generar_grafica_eventos_por_estatus(estadisticas)
-        if graficaEstatusPath and os.path.exists(graficaEstatusPath):
-            img = Image(graficaEstatusPath, width=5*inch, height=3.75*inch)
-            story.append(img)
-        story.append(PageBreak())
+    doc.build(story)
+    return output_path
 
-        # seccion 2 analisis diario
-        story.append(Paragraph("2. ANÁLISIS DIARIO DE CALIDAD DEL AIRE", subtitleStyle))
-        story.append(Paragraph("Visualización del comportamiento de partículas PM1, PM2.5 y PM10 agrupado por día. Las áreas sombreadas en rojo indican la duración de los eventos detectados.", normalStyle))
-        story.append(Spacer(1, 0.2*inch))
 
-        # agrupar eventos por fecha
-        eventosPorDia = defaultdict(list)
-        for ev in eventos:
-            fecha = ev.get('fecha_evento')
-            if fecha:
-                eventosPorDia[fecha].append(ev)
-
-        if eventosPorDia:
-            # iterar fechas ordenadas
-            for fechaStr in sorted(eventosPorDia.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y")):
-                eventosDelDia = eventosPorDia[fechaStr]
-
-                story.append(Paragraph(f"Día: {fechaStr}", styles['Heading3']))
-                story.append(Paragraph(f"Eventos detectados: {len(eventosDelDia)}", styles['Normal']))
-
-                # generar grafica unica por dia
-                graficaDiaPath = generar_grafica_diaria(fechaStr, eventosDelDia)
-
-                if graficaDiaPath and os.path.exists(graficaDiaPath):
-                    imgDia = Image(graficaDiaPath, width=7*inch, height=3.5*inch)
-                    story.append(imgDia)
-                else:
-                    story.append(Paragraph("No hay datos históricos disponibles para este día.", styles['Italic']))
-
-                story.append(Spacer(1, 0.4*inch))
-        else:
-            story.append(Paragraph("No hay eventos registrados para generar gráficas.", normalStyle))
-
-        story.append(PageBreak())
-
-        # seccion 3 detalle tabular
-        story.append(Paragraph("3. DETALLE DE EVENTOS", subtitleStyle))
-
-        if eventos:
-            eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'Max PM2.5']]
-            for evento in eventos:
-                pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "N/A"
-                eventosData.append([
-                    str(evento.get('evento_id', '')),
-                    evento.get('fecha_evento', ''),
-                    evento.get('hora_inicio', ''),
-                    evento.get('estatus', '').upper(),
-                    pm25
-                ])
-
-            eventosTable = Table(eventosData, colWidths=[0.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.5*inch])
-            eventosTable.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ]))
-            story.append(eventosTable)
-
-        doc.build(story)
-        return outputPath
-
-    except Exception as e:
-        print(f"Error crítico generando PDF: {e}")
-        traceback.print_exc()
-        raise e
-
-    
