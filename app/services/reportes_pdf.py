@@ -414,19 +414,47 @@ def generar_reporte_pdf(
             ])
 
         # Definir anchos de columnas (Total ~7.5 inch disponible)
-        # ID, Fec, Hor, Est, PM1, Max1, PM2.5, Max2.5, PM10, Max10
         col_widths = [0.4*inch, 0.65*inch, 0.65*inch, 0.8*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch]
 
         eventosTable = Table(eventosData, colWidths=col_widths)
-        eventosTable.setStyle(TableStyle([
+
+        # Color base alternado columnas generales
+        bg_general_impar = colors.whitesmoke  # Gris claro
+
+        bg_pm1_impar = colors.HexColor('#F8E1F7')
+
+        bg_pm25_impar = colors.HexColor('#FFE0B2')
+
+        bg_pm10_impar = colors.HexColor('#BBDEFB')
+
+        table_styles_cmds = [
             ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
             ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8), # Letra un poco más chica para que quepan datos
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ]))
+        ]
+
+        for i in range(1, len(eventosData)):
+            if i % 2 == 1:
+                bg_gen = bg_general_impar
+                bg_p1 = bg_pm1_impar
+                bg_p25 = bg_pm25_impar
+                bg_p10 = bg_pm10_impar
+            else:
+                bg_gen = colors.white
+                bg_p1 = colors.white
+                bg_p25 = colors.white
+                bg_p10 = colors.white
+
+            table_styles_cmds.append(('BACKGROUND', (0, i), (3, i), bg_gen))
+            table_styles_cmds.append(('BACKGROUND', (4, i), (5, i), bg_p1))
+            table_styles_cmds.append(('BACKGROUND', (6, i), (7, i), bg_p25))
+            table_styles_cmds.append(('BACKGROUND', (8, i), (9, i), bg_p10))
+
+        eventosTable.setStyle(TableStyle(table_styles_cmds))
         story.append(eventosTable)
 
     doc.build(story)
