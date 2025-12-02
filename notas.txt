@@ -28,7 +28,7 @@ ollama run llava:7b
 
 
 dejar corriendo:
-nohup ollama run llava:7b > /dev/null 2>&1 &
+nohup ollama run llava:7b > ollama_log.txt 2>&1 &
 
 
 detener:
