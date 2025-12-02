@@ -8,7 +8,7 @@ import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -37,6 +37,7 @@ def convertir_utc_a_mexico(fecha_str: str, hora_str: str) -> datetime:
         dt_mex_calculado = dt_utc.astimezone(MEX_TZ)
 
         # FORZAR la fecha original combinándola con la hora calculada
+        # Esto corrige casos donde la conversión de zona horaria podría cambiar el día
         dt_final = dt_mex_calculado.replace(
             year=dt_original_date.year,
             month=dt_original_date.month,
@@ -84,21 +85,16 @@ def generar_grafica_eventos_por_estatus(eventosStats: dict) -> str:
     return tempPath
 
 
-def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> Optional[str]:
+def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict], registros: List, start_buffer: datetime, end_buffer: datetime) -> Optional[str]:
     """
-    Genera una grafica para un dia.
-    rango de tiempo es: [Inicio Primer Evento - 30min] hasta [Fin Ultimo Evento + 30min]
+    Genera una grafica para un dia usando los registros ya consultados.
     """
     try:
         if not eventos_del_dia:
             return None
 
-        # Determinar el rango de tiempo necesario para la grafica
-        min_hora_mex = None
-        max_hora_mex = None
-
+        # Procesar eventos para graficar las franjas rojas
         eventos_procesados = []
-
         for evento in eventos_del_dia:
             inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
             fin_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_fin'))
@@ -109,39 +105,18 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
                 'id': evento.get('evento_id')
             })
 
-            # Actualizar limites
-            if min_hora_mex is None or inicio_mex < min_hora_mex:
-                min_hora_mex = inicio_mex
-
-            if max_hora_mex is None or fin_mex > max_hora_mex:
-                max_hora_mex = fin_mex
-
-        # Aplicar el buffer de 30 minutos
-        start_buffer = min_hora_mex - timedelta(minutes=30)
-        end_buffer = max_hora_mex + timedelta(minutes=30)
-
-        # Obtener datos historicos usando timestamps
-        ts_start = int(start_buffer.timestamp())
-        ts_end = int(end_buffer.timestamp())
-
-        registros = obtener_historico_aire(ts_start, ts_end)
-
-        if not registros:
-            print(f"DEBUG: No se encontraron registros de aire para el rango {start_buffer} - {end_buffer}")
-            # Comentado para permitir ver eventos sin aire
-            return None
-
-        # Procesar datos para graficar
+        # Procesar datos de aire para graficar
         tiempos_mex = []
         valores_pm1 = []
         valores_pm25 = []
         valores_pm10 = []
 
         if registros:
-            registros_filtrados = [r for r in registros if r.pm1p0 > 0 and r.pm2p5 > 0 and r.pm10 > 0]
-            registros_filtrados.sort(key=lambda x: x.hora_medicion)
+            # Ordenamos por hora para asegurar lineas correctas
+            registros.sort(key=lambda x: x.hora_medicion)
 
-            for r in registros_filtrados:
+            for r in registros:
+                # Convertir timestamp a datetime zona Mexico
                 if isinstance(r.hora_medicion, (int, float)):
                     dt_utc = datetime.fromtimestamp(r.hora_medicion, pytz.utc)
                 elif isinstance(r.hora_medicion, datetime):
@@ -169,10 +144,6 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
         for ev in eventos_procesados:
             ax.axvspan(ev['inicio'], ev['fin'], color='red', alpha=0.3)
 
-            # Etiqueta rotada
-            """ax.text(ev['inicio'], ax.get_ylim()[1] if tiempos_mex else 1, f"#{ev['id']}",
-                    rotation=270, verticalalignment='bottom', fontsize=8, color='red') """
-
         ax.set_title(f'Monitoreo de Calidad del Aire - {fecha_mex_str}', fontsize=12, fontweight='bold')
         ax.set_ylabel('Concentración (μg/m³)')
         ax.set_xlabel('Hora')
@@ -187,12 +158,12 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
         customLines = [
             Line2D([0], [0], color='#ff6ffb', lw=1),
             Line2D([0], [0], color='#FF9800', lw=2),
-            Line2D([0], [0], color='#795548', lw=1, linestyle='--'),
+            Line2D([0], [0], color='#003e79', lw=1, linestyle='--'),
             matplotlib.patches.Patch(facecolor='red', edgecolor='red', alpha=0.3, label='Evento')
         ]
         ax.legend(customLines, ['PM1', 'PM2.5', 'PM10', 'Evento'], loc='upper right')
 
-        # Ajustar limites X estrictamente a 30min antes/despues
+        # Ajustar limites X estrictamente al buffer calculado
         ax.set_xlim(left=start_buffer, right=end_buffer)
 
         plt.tight_layout()
@@ -210,6 +181,59 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
         import traceback
         traceback.print_exc()
         return None
+
+
+def calcular_maximos_evento(evento: dict, registros: List) -> dict:
+    """
+    Calcula el valor máximo de PM1, PM2.5 y PM10 durante el evento y hasta 10 minutos después.
+    """
+    try:
+        if not registros:
+            return {'max_pm1': 0.0, 'max_pm25': 0.0, 'max_pm10': 0.0}
+
+        # Calcular ventana de tiempo: Inicio Evento -> Fin Evento + 10 min
+        inicio_evento = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
+        fin_evento = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_fin'))
+
+        # Agregamos 10 minutos al final
+        fin_ventana = fin_evento + timedelta(minutes=10)
+
+        max_pm1 = 0.0
+        max_pm25 = 0.0
+        max_pm10 = 0.0
+
+        datos_encontrados = False
+
+        for r in registros:
+            # Convertir hora registro a datetime timezone aware (Mexico)
+            if isinstance(r.hora_medicion, (int, float)):
+                dt_utc = datetime.fromtimestamp(r.hora_medicion, pytz.utc)
+            elif isinstance(r.hora_medicion, datetime):
+                dt_utc = r.hora_medicion if r.hora_medicion.tzinfo else pytz.utc.localize(r.hora_medicion)
+            else:
+                continue
+
+            dt_reg = dt_utc.astimezone(MEX_TZ)
+
+            # Verificar si el registro cae dentro de la ventana (Inicio <= Registro <= Fin + 10min)
+            if inicio_evento <= dt_reg <= fin_ventana:
+                datos_encontrados = True
+                if r.pm1p0 > max_pm1: max_pm1 = r.pm1p0
+                if r.pm2p5 > max_pm25: max_pm25 = r.pm2p5
+                if r.pm10 > max_pm10: max_pm10 = r.pm10
+
+        if not datos_encontrados:
+            return {'max_pm1': 0.0, 'max_pm25': 0.0, 'max_pm10': 0.0}
+
+        return {
+            'max_pm1': max_pm1,
+            'max_pm25': max_pm25,
+            'max_pm10': max_pm10
+        }
+
+    except Exception as e:
+        print(f"Error calculando maximos para evento {evento.get('evento_id')}: {e}")
+        return {'max_pm1': 0.0, 'max_pm25': 0.0, 'max_pm10': 0.0}
 
 
 def generar_reporte_pdf(
@@ -231,6 +255,10 @@ def generar_reporte_pdf(
 
     titleStyle = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24, textColor=colorPrincipal, spaceAfter=30, alignment=TA_CENTER, fontName='Helvetica-Bold')
     subtitleStyle = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'], fontSize=16, textColor=colorSecundario, spaceAfter=12, spaceBefore=12, fontName='Helvetica-Bold')
+
+    # estilo para la nota
+    noteStyle = ParagraphStyle('NoteStyle', parent=styles['BodyText'], fontSize=9, textColor=colors.grey, alignment=TA_JUSTIFY, spaceAfter=10)
+
     normalStyle = styles['BodyText']
     normalStyle.alignment = TA_LEFT
 
@@ -238,7 +266,7 @@ def generar_reporte_pdf(
     story.append(Spacer(1, 1.5*inch))
     story.append(Paragraph("REPORTE DE MONITOREO TÉRMICO", titleStyle))
     story.append(Spacer(1, 0.3*inch))
-    fechaReporte = datetime.now(MEX_TZ).strftime("%d/%m/%Y %H:%M") # Fecha reporte en local
+    fechaReporte = datetime.now(MEX_TZ).strftime("%d/%m/%Y %H:%M")
     story.append(Paragraph(f"Fecha de generación: {fechaReporte} (CDMX)", styles['Normal']))
     if fecha_inicio and fecha_fin:
         story.append(Paragraph(f"Período consultado: {fecha_inicio} a {fecha_fin}", styles['Normal']))
@@ -270,18 +298,15 @@ def generar_reporte_pdf(
     story.append(PageBreak())
 
     story.append(Paragraph("2. ANÁLISIS DIARIO DE CALIDAD DEL AIRE", subtitleStyle))
-    story.append(Paragraph("A continnuación se grafica el historial de la calidad del aire y el historial de "
-                           "detección de eventos confirmados en la isla de datos urbanos en la ESCOM", normalStyle))
-    story.append(Paragraph("El rango visualizado abarca desde 30 minutos antes del primer evento hasta 30 minutos "
-                           "después del último evento del día.", normalStyle))
+    story.append(Paragraph("A continuación se grafica el historial de la calidad del aire y el historial de "
+                           "detección de eventos confirmados en la isla de datos urbanos en la ESCOM.", normalStyle))
     story.append(Spacer(1, 0.2*inch))
 
+    # Agrupar eventos por día
     eventos_por_dia_local = defaultdict(list)
-
     for ev in eventos:
         fecha_str_raw = ev.get('fecha_evento')
         estatus = ev.get('estatus')
-
         if fecha_str_raw and estatus == 'confirmado':
             eventos_por_dia_local[fecha_str_raw].append(ev)
 
@@ -294,57 +319,113 @@ def generar_reporte_pdf(
             story.append(Paragraph(f"Día: {fecha_str}", styles['Heading3']))
             story.append(Paragraph(f"Eventos en este día: {len(eventos_del_dia)}", styles['Normal']))
 
-            graficaDiaPath = generar_grafica_diaria(fecha_str, eventos_del_dia)
+            # 1. Calcular Rango de Tiempo para la consulta (Min Inicio - 30m, Max Fin + 30m)
+            min_hora_mex = None
+            max_hora_mex = None
+
+            for evento in eventos_del_dia:
+                inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
+                fin_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_fin'))
+
+                if min_hora_mex is None or inicio_mex < min_hora_mex: min_hora_mex = inicio_mex
+                if max_hora_mex is None or fin_mex > max_hora_mex: max_hora_mex = fin_mex
+
+            start_buffer = min_hora_mex - timedelta(minutes=30)
+            end_buffer = max_hora_mex + timedelta(minutes=30)
+
+            ts_start = int(start_buffer.timestamp())
+            ts_end = int(end_buffer.timestamp())
+
+            # Consultar Histórico UNA VEZ por día
+            registros_dia = obtener_historico_aire(ts_start, ts_end)
+            if registros_dia:
+                registros_filtrados = [r for r in registros_dia if r.pm1p0 > 0]
+            else:
+                registros_filtrados = []
+
+            # Generar Gráfica pasando los registros
+            graficaDiaPath = generar_grafica_diaria(fecha_str, eventos_del_dia, registros_filtrados, start_buffer, end_buffer)
 
             if graficaDiaPath and os.path.exists(graficaDiaPath):
                 imgDia = Image(graficaDiaPath, width=7*inch, height=3.5*inch)
                 story.append(imgDia)
             else:
-                story.append(Paragraph("No se pudo generar la gráfica (sin datos históricos o error).", styles['Italic']))
+                story.append(Paragraph("No se pudo generar la gráfica (sin datos históricos).", styles['Italic']))
+
+            # CALCULAR MAXIMOS para cada evento usando los registros consultados
+            for evento in eventos_del_dia:
+                maximos = calcular_maximos_evento(evento, registros_filtrados)
+                evento['max_pm1'] = maximos['max_pm1']
+                evento['max_pm25'] = maximos['max_pm25']
+                evento['max_pm10'] = maximos['max_pm10']
 
             story.append(Spacer(1, 0.4*inch))
     else:
-        story.append(Paragraph("No hay eventos registrados para el periodo seleccionado.", normalStyle))
+        story.append(Paragraph("No hay eventos confirmados para graficar en el periodo seleccionado.", normalStyle))
 
     story.append(PageBreak())
 
     # SECCION 3: DETALLE DE EVENTOS (TABLA)
     story.append(Paragraph("3. DETALLE DE EVENTOS", subtitleStyle))
+
+    # Nota explicativa solicitada
+    nota_texto = "<b>Nota:</b> Las columnas 'Max' representan cuánto subió la contaminación a su punto máximo durante el evento o hasta 10 minutos después de que finalizó."
+    story.append(Paragraph(nota_texto, noteStyle))
     story.append(Spacer(1, 0.1*inch))
 
     if eventos:
-        # Headers de tabla actualizados con PM 1.0, PM 2.5 y PM 10
-        eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'PM 1.0', 'PM 2.5', 'PM 10']]
+        # Headers de tabla actualizados
+        # Ajustamos headers para que quepan
+        headers = ['ID', 'Fecha', 'Hora', 'Estatus', 'PM1', 'Max\nPM1', 'PM2.5', 'Max\nPM2.5', 'PM10', 'Max\nPM10']
+        eventosData = [headers]
 
         for evento in eventos:
             dt_inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
 
-            fecha_local = dt_inicio_mex.strftime("%d/%m/%Y")
-            hora_local = dt_inicio_mex.strftime("%H:%M:%S")
+            fecha_local = dt_inicio_mex.strftime("%d/%m") # Formato corto para ahorrar espacio
+            hora_local = dt_inicio_mex.strftime("%H:%M")
 
-            # Extracción segura de PM
-            pm1 = f"{evento.get('promedio_pm1p0', 0):.1f}" if evento.get('promedio_pm1p0') else "N/A"
-            pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "N/A"
-            pm10 = f"{evento.get('promedio_pm10', 0):.1f}" if evento.get('promedio_pm10') else "N/A"
+            # Valores Promedio
+            prom_pm1 = f"{evento.get('promedio_pm1p0', 0):.1f}" if evento.get('promedio_pm1p0') else "-"
+            prom_pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "-"
+            prom_pm10 = f"{evento.get('promedio_pm10', 0):.1f}" if evento.get('promedio_pm10') else "-"
+
+            # Valores Maximos (calculados arriba, o 0 si no es confirmado/no hubo datos)
+            # Si el evento no fue procesado en el loop de graficas (ej. no confirmado), estos keys no existiran
+            max_pm1 = f"{evento.get('max_pm1', 0):.1f}" if evento.get('max_pm1') else "-"
+            max_pm25 = f"{evento.get('max_pm25', 0):.1f}" if evento.get('max_pm25') else "-"
+            max_pm10 = f"{evento.get('max_pm10', 0):.1f}" if evento.get('max_pm10') else "-"
+
+            # Acortar estatus para que quepa mejor
+            estatus_corto = evento.get('estatus', '').upper()
+            if len(estatus_corto) > 10: estatus_corto = estatus_corto[:9] + "."
 
             eventosData.append([
                 str(evento.get('evento_id', '')),
                 fecha_local,
                 hora_local,
-                evento.get('estatus', '').upper(),
-                pm1,
-                pm25,
-                pm10
+                estatus_corto,
+                prom_pm1,
+                max_pm1,
+                prom_pm25,
+                max_pm25,
+                prom_pm10,
+                max_pm10
             ])
 
-        # Se ajustan los anchos de columna para acomodar las nuevas columnas
-        # Ajustando para que quepan 7 columnas
-        eventosTable = Table(eventosData, colWidths=[0.7*inch, 1.1*inch, 1.1*inch, 1.1*inch, 0.9*inch, 0.9*inch, 0.9*inch])
+        # Definir anchos de columnas (Total ~7.5 inch disponible)
+        # ID, Fec, Hor, Est, PM1, Max1, PM2.5, Max2.5, PM10, Max10
+        col_widths = [0.4*inch, 0.65*inch, 0.65*inch, 0.8*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch]
+
+        eventosTable = Table(eventosData, colWidths=col_widths)
         eventosTable.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
             ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8), # Letra un poco más chica para que quepan datos
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
         story.append(eventosTable)
 
