@@ -20,5 +20,20 @@ kill numero
 
 
 
+
+
+
+prueba:
 ollama run llava:7b
 
+
+dejar corriendo:
+nohup ollama run llava:7b > /dev/null 2>&1 &
+
+
+detener:
+ollama stop llava:7b
+
+
+o para detener todos los procesos de ollama:
+pkill ollama
