@@ -11,7 +11,8 @@ def obtener_descripcion_de_imagen(imagen_b64: str) -> Optional[str]:
     Envía una imagen en Base64 a Ollama (Llava) para obtener una descripción.
     """
 
-    prompt: str = "Describe esta imagen tomada automaticamente al detectar un cigarro prendido, describe en español latino, enfocándote en cuantos fumadores hay y que parece que estan haciendo."
+    prompt: str = ("Describe esta imagen tomada automaticamente en una camara termica al detectar un cigarro prendido, "
+                   "describe en español latino, enfocándote en cuantos fumadores hay y que parece que estan haciendo.")
 
     # Limpiamos el header de base64 si viene incluido (ej: "data:image/jpeg;base64,")
     if "," in imagen_b64:
