@@ -168,11 +168,12 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
         # Plotear franjas de eventos
         for ev in eventos_procesados:
             ax.axvspan(ev['inicio'], ev['fin'], color='red', alpha=0.3)
-            # Etiqueta rotada
-            ax.text(ev['inicio'], ax.get_ylim()[1] if tiempos_mex else 1, f"#{ev['id']}",
-                    rotation=270, verticalalignment='bottom', fontsize=8, color='red')
 
-        ax.set_title(f'Monitoreo de Calidad del Aire - {fecha_mex_str} (Horario CDMX)', fontsize=12, fontweight='bold')
+            # Etiqueta rotada
+            """ax.text(ev['inicio'], ax.get_ylim()[1] if tiempos_mex else 1, f"#{ev['id']}",
+                    rotation=270, verticalalignment='bottom', fontsize=8, color='red') """
+
+        ax.set_title(f'Monitoreo de Calidad del Aire - {fecha_mex_str}', fontsize=12, fontweight='bold')
         ax.set_ylabel('Concentración (μg/m³)')
         ax.set_xlabel('Hora (CDMX)')
 
@@ -269,7 +270,10 @@ def generar_reporte_pdf(
     story.append(PageBreak())
 
     story.append(Paragraph("2. ANÁLISIS DIARIO DE CALIDAD DEL AIRE", subtitleStyle))
-    story.append(Paragraph("Gráficas en horario local (Ciudad de México). El rango visualizado abarca desde 30 minutos antes del primer evento hasta 30 minutos después del último evento del día.", normalStyle))
+    story.append(Paragraph("A continnuación se grafica el historial de la calidad del aire y el historial de "
+                           "detección de eventos confirmados en la isla de datos urbanos en la ESCOM", normalStyle))
+    story.append(Paragraph("El rango visualizado abarca desde 30 minutos antes del primer evento hasta 30 minutos "
+                           "después del último evento del día.", normalStyle))
     story.append(Spacer(1, 0.2*inch))
 
     eventos_por_dia_local = defaultdict(list)
@@ -306,12 +310,11 @@ def generar_reporte_pdf(
 
     # SECCION 3: DETALLE DE EVENTOS (TABLA)
     story.append(Paragraph("3. DETALLE DE EVENTOS", subtitleStyle))
-    story.append(Paragraph("Nota: Las horas mostradas en esta tabla han sido ajustadas a horario local (CDMX) manteniendo la fecha de registro.", styles['Italic']))
     story.append(Spacer(1, 0.1*inch))
 
     if eventos:
         # Headers de tabla
-        eventosData = [['ID', 'Fecha (CDMX)', 'Hora (CDMX)', 'Estatus', 'Max PM2.5']]
+        eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'Max PM2.5']]
 
         for evento in eventos:
             dt_inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
