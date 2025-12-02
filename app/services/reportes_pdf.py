@@ -278,11 +278,9 @@ def generar_reporte_pdf(
         fecha_str_raw = ev.get('fecha_evento')
         estatus = ev.get('estatus')
 
-        print(estatus)
-
-        if fecha_str_raw:
+        if fecha_str_raw and estatus == 'confirmado':
             eventos_por_dia_local[fecha_str_raw].append(ev)
-            
+
     if eventos_por_dia_local:
         dias_ordenados = sorted(eventos_por_dia_local.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y"))
 
