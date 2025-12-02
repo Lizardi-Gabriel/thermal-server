@@ -313,8 +313,8 @@ def generar_reporte_pdf(
     story.append(Spacer(1, 0.1*inch))
 
     if eventos:
-        # Headers de tabla
-        eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'Max PM2.5']]
+        # Headers de tabla actualizados con PM 1.0, PM 2.5 y PM 10
+        eventosData = [['ID', 'Fecha', 'Hora', 'Estatus', 'PM 1.0', 'PM 2.5', 'PM 10']]
 
         for evento in eventos:
             dt_inicio_mex = convertir_utc_a_mexico(evento.get('fecha_evento'), evento.get('hora_inicio'))
@@ -322,17 +322,24 @@ def generar_reporte_pdf(
             fecha_local = dt_inicio_mex.strftime("%d/%m/%Y")
             hora_local = dt_inicio_mex.strftime("%H:%M:%S")
 
+            # Extracción segura de PM
+            pm1 = f"{evento.get('promedio_pm1p0', 0):.1f}" if evento.get('promedio_pm1p0') else "N/A"
             pm25 = f"{evento.get('promedio_pm2p5', 0):.1f}" if evento.get('promedio_pm2p5') else "N/A"
+            pm10 = f"{evento.get('promedio_pm10', 0):.1f}" if evento.get('promedio_pm10') else "N/A"
 
             eventosData.append([
                 str(evento.get('evento_id', '')),
                 fecha_local,
                 hora_local,
                 evento.get('estatus', '').upper(),
-                pm25
+                pm1,
+                pm25,
+                pm10
             ])
 
-        eventosTable = Table(eventosData, colWidths=[0.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.5*inch])
+        # Se ajustan los anchos de columna para acomodar las nuevas columnas
+        # Ajustando para que quepan 7 columnas
+        eventosTable = Table(eventosData, colWidths=[0.7*inch, 1.1*inch, 1.1*inch, 1.1*inch, 0.9*inch, 0.9*inch, 0.9*inch])
         eventosTable.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colorPrincipal),
             ('TEXTCOLOR', (0, 0), (-1, 0), colorTextoCabecera),
