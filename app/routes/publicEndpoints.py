@@ -244,8 +244,7 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
             return
 
         descripcion_ia = obtener_descripcion_de_imagen(
-            imagen_b64,
-            prompt="Describe la situación en esta imagen térmica o visual. Identifica anomalías."
+            imagen_b64
         )
 
         if descripcion_ia:
