@@ -419,7 +419,7 @@ def generar_reporte_pdf(
         eventosTable = Table(eventosData, colWidths=col_widths)
 
         # Color base alternado columnas generales
-        bg_general_impar = colors.whitesmoke  # Gris claro
+        bg_general_impar = colors.silver
 
         bg_pm1_impar = colors.HexColor('#F8E1F7')
 
