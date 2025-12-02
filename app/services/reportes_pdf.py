@@ -175,7 +175,7 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict]) -> O
 
         ax.set_title(f'Monitoreo de Calidad del Aire - {fecha_mex_str}', fontsize=12, fontweight='bold')
         ax.set_ylabel('Concentración (μg/m³)')
-        ax.set_xlabel('Hora (CDMX)')
+        ax.set_xlabel('Hora')
 
         # Formato de fecha en eje X
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M', tz=MEX_TZ))
