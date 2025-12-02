@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta, date
 from typing import Optional
 
 from app import crud, schemas, models
-from app.database import get_db
+from app.database import get_db, SessionLocal
+from app.schemas import DescripcionImagenRequest
 
 from app.services import security
 from app.services.aire import consumir_api_aire
@@ -13,6 +14,8 @@ from app.services.firebase_notifications import enviar_notificacion_multiple
 from app.services.email_service import enviar_correo_recuperacion
 
 import secrets
+
+from app.services.llm_service import obtener_descripcion_de_imagen
 
 router = APIRouter()
 
@@ -222,3 +225,68 @@ async def restablecer_password(datos: schemas.RestablecerPassword, db: Session =
         exito=True,
         mensaje="Contraseña restablecida exitosamente"
     )
+
+
+def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
+    """
+    Función que se ejecuta en segundo plano.
+    Crea su propia sesión de BD, llama a Ollama y actualiza el evento.
+    """
+    print(f"--- Iniciando análisis para evento {evento_id} ---")
+
+    # Crear una nueva sesión de base de datos manual
+    db_session = SessionLocal()
+
+    try:
+        evento = db_session.query(models.Evento).filter(models.Evento.evento_id == evento_id).first()
+        if not evento:
+            print(f"Evento {evento_id} no encontrado.")
+            return
+
+        descripcion_ia = obtener_descripcion_de_imagen(
+            imagen_b64,
+            prompt="Describe la situación en esta imagen térmica o visual. Identifica anomalías."
+        )
+
+        if descripcion_ia:
+            desc_actual = evento.descripcion or ""
+            nueva_descripcion = f"{descripcion_ia}".strip()
+
+            evento.descripcion = nueva_descripcion
+
+            db_session.commit()
+            print(f"Evento {evento_id} actualizado con descripción de llm.")
+        else:
+            print(f"error en llm no descripción para evento {evento_id}.")
+
+    except Exception as e:
+        print(f"Error crítico en background task llm: {e}")
+        db_session.rollback()
+    finally:
+        # Cerrar la sesión
+        db_session.close()
+
+
+@router.post("/eventos/{evento_id}/descripcion", status_code=200)
+async def agregar_descripcion_ia(
+        evento_id: int,
+        request: DescripcionImagenRequest,
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db)
+):
+    """
+    Recibe una imagen en Base64, responde inmediatamente al cliente
+    y lanza el proceso de Ollama en segundo plano.
+    """
+    if not crud.get_evento_by_id(db, evento_id):
+        raise HTTPException(status_code=404, detail="Evento no encontrado.")
+
+    # Agendar la tarea en segundo plano
+    background_tasks.add_task(
+        procesar_y_guardar_descripcion,
+        evento_id,
+        request.imagen_base64
+    )
+
+    return {"mensaje": "Imagen recibida. analisis desc en segundo plano."}
+

@@ -344,3 +344,7 @@ class RestablecerPasswordResponse(BaseModel):
     exito: bool
     mensaje: str
 
+
+class DescripcionImagenRequest(BaseModel):
+    imagen_base64: str
+

@@ -17,3 +17,8 @@ pgrep -f "uvicorn app.main:app"
 
 matarlo:
 kill numero
+
+
+
+ollama run llava:7b
+
