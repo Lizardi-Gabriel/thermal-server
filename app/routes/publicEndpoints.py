@@ -248,7 +248,6 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
         )
 
         if descripcion_ia:
-            desc_actual = evento.descripcion or ""
             nueva_descripcion = f"{descripcion_ia}".strip()
 
             evento.descripcion = nueva_descripcion
@@ -257,6 +256,14 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
             print(f"Evento {evento_id} actualizado con descripción de llm.")
         else:
             print(f"error en llm no descripción para evento {evento_id}.")
+
+            crud.create_log(
+                db_session,
+                log=schemas.LogSistemaCreate(
+                    tipo=models.TipoLogEnum.error,
+                    mensaje=f"error descripción imagen evento_id={evento_id}"
+                )
+            )
 
     except Exception as e:
         print(f"Error crítico en background task llm: {e}")
@@ -280,6 +287,7 @@ async def agregar_descripcion_ia(
     if not crud.get_evento_by_id(db, evento_id):
         raise HTTPException(status_code=404, detail="Evento no encontrado.")
 
+    print('describirndo la img en 2do plano')
     # Agendar la tarea en segundo plano
     background_tasks.add_task(
         procesar_y_guardar_descripcion,
