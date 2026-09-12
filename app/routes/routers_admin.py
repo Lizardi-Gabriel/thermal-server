@@ -11,13 +11,11 @@ from app.services import security
 from app.database import get_db
 
 
-
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"],
     dependencies=[Depends(security.verificar_rol_admin)]
 )
-
 
 
 @router.get("/reportes/generar-pdf")
@@ -95,6 +93,7 @@ def generar_reporte_pdf_endpoint(
             }
         )
     except Exception as e:
+        print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al generar el reporte: {str(e)}"
@@ -172,7 +171,8 @@ def eliminar_usuario(
             detail="No puedes eliminar tu propia cuenta"
         )
 
-    success = crud.delete_user(db, usuario_id)
+    success = None #crud.delete_user(db, usuario_id)
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -180,19 +180,5 @@ def eliminar_usuario(
         )
     return None
 
-
-@router.get("/usuarios/{usuario_id}", response_model=schemas.Usuario)
-def obtener_usuario(
-        usuario_id: int,
-        db: Session = Depends(get_db)
-):
-    """Obtener detalles de un usuario especifico."""
-    db_user = crud.get_user_by_id(db, usuario_id)
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
-    return db_user
 
 

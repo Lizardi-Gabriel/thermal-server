@@ -170,6 +170,10 @@ class EventoOptimizado(BaseModel):
     promedio_pm2p5: Optional[float] = None
     promedio_pm1p0: Optional[float] = None
 
+    color_pm10: Optional[str] = None
+    color_pm2p5: Optional[str] = None
+    color_pm1p0: Optional[str] = None
+
     # Solo la imagen con mas detecciones para preview
     imagen_preview: Optional[Imagen] = None
 
@@ -339,4 +343,8 @@ class RestablecerPasswordResponse(BaseModel):
     """Schema para respuesta de restablecimiento."""
     exito: bool
     mensaje: str
+
+
+class DescripcionImagenRequest(BaseModel):
+    imagen_base64: str
 
