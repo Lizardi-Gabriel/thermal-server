@@ -15,11 +15,15 @@ DB_NAME = os.getenv("DB_NAME")
 
 
 # crear el motor de la base de datos
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
+
 engine = create_engine(
-    f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+    DATABASE_URL,
     echo=False,
     pool_pre_ping=True,
-    connect_args={"ssl_disabled": True}
+    connect_args={
+        "ssl_disabled": True  # Permite autenticar sin certificado SSL obligatorio
+    }
 )
 
 # crear la sesion

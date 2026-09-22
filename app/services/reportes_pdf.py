@@ -3,6 +3,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List, Optional
+from loguru import logger
 import pytz
 import matplotlib
 import matplotlib.dates as mdates
@@ -45,8 +46,8 @@ def convertir_utc_a_mexico(fecha_str: str, hora_str: str) -> datetime:
         )
 
         return dt_final
-    except Exception as e:
-        print(f"Error convirtiendo fecha: {e}")
+    except Exception:
+        logger.exception("Error convirtiendo fecha")
         return datetime.now(MEX_TZ)
 
 
@@ -176,10 +177,8 @@ def generar_grafica_diaria(fecha_mex_str: str, eventos_del_dia: List[dict], regi
 
         return tempPath
 
-    except Exception as e:
-        print(f"Error generando grafica diaria {fecha_mex_str}: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Error generando gráfica diaria {}", fecha_mex_str)
         return None
 
 
@@ -231,8 +230,8 @@ def calcular_maximos_evento(evento: dict, registros: List) -> dict:
             'max_pm10': max_pm10
         }
 
-    except Exception as e:
-        print(f"Error calculando maximos para evento {evento.get('evento_id')}: {e}")
+    except Exception:
+        logger.exception("Error calculando máximos para evento {}", evento.get('evento_id'))
         return {'max_pm1': 0.0, 'max_pm25': 0.0, 'max_pm10': 0.0}
 
 

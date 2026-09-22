@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+import os
+import secrets
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, BackgroundTasks, Request, UploadFile, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta, date
 from typing import Optional
+from loguru import logger
 
 from app import crud, schemas, models
 from app.database import get_db, SessionLocal
@@ -10,10 +16,6 @@ from app.schemas import DescripcionImagenRequest
 
 from app.services import security
 from app.services.aire import consumir_api_aire
-from app.services.firebase_notifications import enviar_notificacion_multiple
-from app.services.email_service import enviar_correo_recuperacion
-
-import secrets
 
 from app.services.llm_service import obtener_descripcion_de_imagen
 
@@ -53,17 +55,8 @@ def crear_evento(evento: schemas.EventoCreate, db: Session = Depends(get_db)):
     # Crear el evento
     nuevo_evento = crud.create_evento(db=db, evento=evento)
 
-    # Obtener tokens FCM de todos los operadores activos
-    tokens_operadores = crud.get_tokens_operadores_activos(db)
-
-    # Enviar notificaciones a todos los operadores
-    if tokens_operadores:
-        try:
-            enviar_notificacion_multiple(tokens_operadores, nuevo_evento.evento_id)
-        except Exception as e:
-            print(f"Error al enviar notificaciones push: {e}")
-            # No fallar la creacion del evento si las notificaciones fallan
-
+    # Notificaciones push desactivadas: la infraestructura de Firebase ya no se usa.
+    # Se mantiene la creación del evento sin bloquear la respuesta.
     return nuevo_evento
 
 
@@ -75,7 +68,90 @@ def listar_logs(fecha: Optional[date] = Query(default=None), tipo: Optional[mode
     return crud.get_logs(db=db, fecha_log=fecha, tipo_log=tipo)
 
 
-# TODO: agrgarlo a un endpoint protegido
+@router.post("/eventos/{evento_id}/imagenes/upload", status_code=status.HTTP_201_CREATED)
+async def subir_imagen_evento(
+    evento_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(security.get_current_user),
+):
+    """Sube una imagen para un evento y devuelve su URL pública local."""
+    if not crud.get_evento_by_id(db, evento_id):
+        logger.warning("Intento de subir imagen para evento inexistente: {}", evento_id)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evento no encontrado.")
+
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp"}
+
+    content_type = file.content_type or ""
+    filename = file.filename or "imagen"
+    extension = Path(filename).suffix.lower()
+
+    if content_type not in allowed_types and extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de archivo no válido. Se aceptan JPG, PNG y WEBP."
+        )
+
+    if extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Extensión de archivo no válida."
+        )
+
+    media_root = Path(os.getenv("MEDIA_ROOT", "/var/data/fotos")).resolve()
+    if not media_root.is_absolute():
+        media_root = (Path.cwd() / media_root).resolve()
+
+    try:
+        media_root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        media_root = (Path.cwd() / "media").resolve()
+        media_root.mkdir(parents=True, exist_ok=True)
+
+    evento_dir = media_root / "eventos" / str(evento_id)
+    if not crud.get_evento_by_id(db, evento_id):
+        evento_dir = media_root / "temp" / str(uuid4())
+
+    evento_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = f"{uuid4().hex}{extension}"
+    file_path = evento_dir / safe_name
+
+    try:
+        with file_path.open("wb") as buffer:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                buffer.write(chunk)
+    except Exception:
+        logger.exception("Error guardando imagen en disco para evento_id={}", evento_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudo guardar la imagen en el servidor."
+        )
+
+    relative_path = file_path.relative_to(media_root)
+    public_url = f"/static/{relative_path.as_posix().replace('\\', '/')}"
+    file_size = file_path.stat().st_size
+
+    logger.info(
+        "Imagen subida correctamente para evento_id={} | archivo={} | url={} | size={} bytes",
+        evento_id,
+        file_path.name,
+        public_url,
+        file_size,
+    )
+
+    return {
+        "success": True,
+        "file_name": file_path.name,
+        "url": public_url,
+        "size": file_size,
+    }
+
 
 # ENDPOINT COMBINADO para Imagen y Detecciones
 
@@ -90,26 +166,34 @@ def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecc
 
     datos_aire = consumir_api_aire()
 
-    if datos_aire.descrip != "error":
-        # Creamos un nuevo registro de calidad del aire asociado al evento
-        calidad_aire_data = schemas.CalidadAireCreate(
-            evento_id=evento_id,
-            temp=datos_aire.temp,
-            humedad=datos_aire.humedad,
-            pm1p0=datos_aire.pm1p0,
-            pm2p5=datos_aire.pm2p5,
-            pm10=datos_aire.pm10,
-            aqi=datos_aire.aqi,
-            descrip=datos_aire.descrip,
-            hora_medicion=datos_aire.hora_medicion,
-            tipo=schemas.TipoMedicionEnum.durante
-        )
-        crud.create_calidad_aire(db, registro=calidad_aire_data)
+    if datos_aire is not None:
+        descripcion = getattr(datos_aire, "descrip", "") or ""
+        if not descripcion.startswith("WEATHERLINK_"):
+            # Creamos un nuevo registro de calidad del aire asociado al evento
+            calidad_aire_data = schemas.CalidadAireCreate(
+                evento_id=evento_id,
+                temp=datos_aire.temp,
+                humedad=datos_aire.humedad,
+                pm1p0=datos_aire.pm1p0,
+                pm2p5=datos_aire.pm2p5,
+                pm10=datos_aire.pm10,
+                aqi=datos_aire.aqi,
+                descrip=datos_aire.descrip,
+                hora_medicion=datos_aire.hora_medicion,
+                tipo=schemas.TipoMedicionEnum.durante
+            )
+            crud.create_calidad_aire(db, registro=calidad_aire_data)
 
-        crud.create_log(db, log=schemas.LogSistemaCreate(
-            nivel="INFO",
-            mensaje=f"Se agrega imagen y detecciones, evento: {evento_id}, calidad de aire: {calidad_aire_data.model_dump_json(indent=4)}"
-        ))
+            crud.create_log(db, log=schemas.LogSistemaCreate(
+                tipo=models.TipoLogEnum.info,
+                mensaje=f"Se agrega imagen y detecciones, evento: {evento_id}, calidad de aire: {calidad_aire_data.model_dump_json(indent=4)}"
+            ))
+        else:
+            logger.warning(
+                "No se registra calidad del aire para evento_id={} porque WeatherLink reportó un estado fallido: {}",
+                evento_id,
+                descripcion,
+            )
 
     return crud.create_imagen_con_detecciones(db, evento_id=evento_id, imagen=data.imagen, detecciones=data.detecciones)
 
@@ -129,7 +213,7 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     Solicitar recuperacion de contraseña.
     Envia un correo con un enlace para restablecer la contraseña.
     """
-    print(f"Solicitud de recuperacion de contraseña para correo: {solicitud.correo_electronico}")
+    logger.info("Solicitud de recuperación de contraseña para correo: {}", solicitud.correo_electronico)
 
     # Buscar usuario por correo
     usuario = crud.get_user_by_email(db, correo_electronico=solicitud.correo_electronico)
@@ -140,7 +224,7 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     }
 
     if not usuario:
-        print(f"Correo: {solicitud.correo_electronico}, no existe")
+        logger.warning("Correo no encontrado para recuperación: {}", solicitud.correo_electronico)
         # Retornar mensaje generico sin revelar que el usuario no existe
         return mensaje_exito
 
@@ -150,22 +234,12 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     # Guardar token en BD
     crud.crear_token_recuperacion(db, usuario.usuario_id, token, minutos_expiracion=30)
 
-    print(f"se enviara correo a: {usuario.correo_electronico}")
-    # Enviar correo
-    correo_enviado = enviar_correo_recuperacion(
-        email_destino=usuario.correo_electronico,
-        nombre_usuario=usuario.nombre_usuario,
-        token=token
-    )
+    logger.info("Se generó token de recuperación para usuario: {} (email service deshabilitado)", usuario.nombre_usuario)
 
-    if not correo_enviado:
-        # Log del error pero no revelar al usuario
-        print(f"Error al enviar correo a {usuario.correo_electronico}")
-
-    # Crear log del sistema
+    # El servicio de correo fue removido; se registra el evento y se devuelve la respuesta genérica.
     crud.create_log(db, log=schemas.LogSistemaCreate(
         tipo=models.TipoLogEnum.info,
-        mensaje=f"Solicitud de recuperacion de contraseña para usuario: {usuario.nombre_usuario}"
+        mensaje=f"Solicitud de recuperacion de contraseña para usuario: {usuario.nombre_usuario} (email service deshabilitado)"
     ))
 
     return mensaje_exito
@@ -232,7 +306,7 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
     Función que se ejecuta en segundo plano.
     Crea su propia sesión de BD, llama a Ollama y actualiza el evento.
     """
-    print(f"--- Iniciando análisis para evento {evento_id} ---")
+    logger.info("Iniciando análisis IA para evento_id={}", evento_id)
 
     # Crear una nueva sesión de base de datos manual
     db_session = SessionLocal()
@@ -240,7 +314,7 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
     try:
         evento = db_session.query(models.Evento).filter(models.Evento.evento_id == evento_id).first()
         if not evento:
-            print(f"Evento {evento_id} no encontrado.")
+            logger.warning("Evento no encontrado en análisis IA: {}", evento_id)
             return
 
         descripcion_ia = obtener_descripcion_de_imagen(
@@ -253,9 +327,9 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
             evento.descripcion = nueva_descripcion
 
             db_session.commit()
-            print(f"Evento {evento_id} actualizado con descripción de llm.")
+            logger.info("Evento actualizado con descripción de IA: {}", evento_id)
         else:
-            print(f"error en llm no descripción para evento {evento_id}.")
+            logger.warning("No se obtuvo descripción del LLM para evento_id={}", evento_id)
 
             crud.create_log(
                 db_session,
@@ -265,8 +339,8 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
                 )
             )
 
-    except Exception as e:
-        print(f"Error crítico en background task llm: {e}")
+    except Exception:
+        logger.exception("Error crítico en background task LLM para evento_id={}", evento_id)
         db_session.rollback()
     finally:
         # Cerrar la sesión
@@ -287,7 +361,7 @@ async def agregar_descripcion_ia(
     if not crud.get_evento_by_id(db, evento_id):
         raise HTTPException(status_code=404, detail="Evento no encontrado.")
 
-    print('describirndo la img en 2do plano')
+    logger.info("Solicitado análisis IA en segundo plano para evento_id={}", evento_id)
     # Agendar la tarea en segundo plano
     background_tasks.add_task(
         procesar_y_guardar_descripcion,

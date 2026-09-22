@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from loguru import logger
 
 from app import crud, models, schemas
 from app.database import get_db
@@ -29,7 +30,7 @@ def hashear_password(password: str) -> str:
     try:
         return pwd_context.hash(password)
     except Exception as e:
-        print(f"Error hasheando contraseña: {e}")
+        logger.exception("Error hasheando contraseña")
         raise
 
 

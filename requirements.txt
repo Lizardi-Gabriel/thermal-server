@@ -5,14 +5,14 @@ pydantic
 python-dotenv
 python-jose[cryptography]
 passlib[bcrypt]
-mysql-connector-python
 pydantic[email]
 python-multipart
 bcrypt==4.0.1
 requests
-firebase-admin
 reportlab
 matplotlib
 pillow
-sendgrid
 pytz
+loguru
+pymysql
+cryptography

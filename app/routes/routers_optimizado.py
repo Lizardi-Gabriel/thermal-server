@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import date
+from loguru import logger
 
 from app import crud, schemas, models
 from app.services import security
@@ -22,7 +23,9 @@ def obtener_estadisticas_eventos(
     Obtiene estadisticas generales de eventos.
     Util para dashboards de admin.
     """
+    logger.info("Solicitando estadísticas de eventos | fecha_inicio={} | fecha_fin={}", fecha_inicio, fecha_fin)
     estadisticas = crud.get_estadisticas_eventos(db, fecha_inicio, fecha_fin)
+    logger.info("Estadísticas generadas correctamente: {}", estadisticas)
     return schemas.EstadisticasEventos(**estadisticas)
 
 
@@ -46,6 +49,13 @@ def listar_eventos_optimizado(
     - fecha_inicio: Fecha inicio del rango
     - fecha_fin: Fecha fin del rango
     """
+    logger.info(
+        "Consultando eventos optimizados | estatus={} | usuario_id={} | fecha_inicio={} | fecha_fin={}",
+        estatus,
+        usuario_id,
+        fecha_inicio,
+        fecha_fin,
+    )
 
     filtros = schemas.EventosFiltros(
         estatus=estatus,
@@ -56,7 +66,11 @@ def listar_eventos_optimizado(
         #limit=limit
     )
 
-    eventos, total_count = crud.get_eventos_optimizado(db, filtros)
+    try:
+        eventos, total_count = crud.get_eventos_optimizado(db, filtros)
+    except Exception:
+        logger.exception("Error al consultar eventos optimizados con filtros: estatus={} usuario_id={} fecha_inicio={} fecha_fin={}", estatus, usuario_id, fecha_inicio, fecha_fin)
+        raise
 
     # Construir respuesta con campos calculados (sin todas las imagenes)
     eventos_optimizados = []
@@ -75,6 +89,7 @@ def listar_eventos_optimizado(
 
         eventos_optimizados.append(schemas.EventoOptimizado(**evento_dict))
 
+    logger.info("Eventos optimizados obtenidos: {} registros", len(eventos_optimizados))
     return eventos_optimizados
 
 
@@ -87,15 +102,21 @@ def obtener_evento_optimizado(
     Obtiene un evento especifico con campos calculados.
     Incluye TODAS las imagenes para el detalle.
     """
+    logger.info("Consultando detalle optimizado del evento_id={}", evento_id)
     evento = crud.get_evento_by_id(db, evento_id)
 
     if not evento:
+        logger.warning("Evento no encontrado al consultar detalle optimizado: {}", evento_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evento no encontrado"
         )
 
-    campos_calculados = crud.calcular_campos_evento(evento, incluir_todas_imagenes=True)
+    try:
+        campos_calculados = crud.calcular_campos_evento(evento, incluir_todas_imagenes=True)
+    except Exception:
+        logger.exception("Error al calcular campos optimizados del evento_id={}", evento_id)
+        raise
 
     evento_dict = {
         "evento_id": evento.evento_id,
@@ -107,4 +128,5 @@ def obtener_evento_optimizado(
         **campos_calculados
     }
 
+    logger.info("Detalle optimizado generado correctamente para evento_id={}", evento_id)
     return schemas.EventoDetalleOptimizado(**evento_dict)

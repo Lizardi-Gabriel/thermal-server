@@ -6,23 +6,30 @@ import os
 from pydantic import BaseModel
 from enum import Enum
 from typing import List, Optional
-
+from loguru import logger
 
 from app.schemas import CalidadAireBase
 
+WEATHERLINK_CAIDO = "WEATHERLINK_CAIDO"
+WEATHERLINK_SIN_DATOS = "WEATHERLINK_SIN_DATOS"
+WEATHERLINK_JSON_INVALIDO = "WEATHERLINK_JSON_INVALIDO"
 
-def retornar_error_general(mensaje: str) -> CalidadAireBase:
+
+def retornar_error_general(mensaje: str, estado: str = WEATHERLINK_CAIDO) -> CalidadAireBase:
     """
-    Retorna un objeto CalidadAireBase con valores None y un mensaje de error.
+    Retorna un objeto CalidadAireBase con valores válidos y una categoría explícita
+    para distinguir si WeatherLink cayó, respondió sin datos o devolvió JSON inválido.
     """
+    logger.warning("API de calidad del aire falló | estado={} | detalle={}", estado, mensaje)
     return CalidadAireBase(
-        temp=None,
-        humedad=None,
-        pm1p0=None,
-        pm2p5=None,
-        pm10=None,
-        aqi=None,
-        descrip=mensaje
+        temp=0.0,
+        humedad=0.0,
+        pm1p0=0.0,
+        pm2p5=0.0,
+        pm10=0.0,
+        aqi=0.0,
+        descrip=f"{estado}: {mensaje}",
+        hora_medicion=datetime.datetime.utcnow()
     )
 
 
@@ -79,27 +86,39 @@ def consumir_api_aire() -> CalidadAireBase:
                         }
 
                         schemaCalidadAire = CalidadAireBase(**datosParaSchema)
-
-                        print(schemaCalidadAire.model_dump_json(indent=4))
-
+                        logger.debug("Calidad del aire recibida: {}", schemaCalidadAire.model_dump_json(indent=4))
                         return schemaCalidadAire
 
-        return retornar_error_general("error")
+        logger.warning("WeatherLink respondió sin datos válidos para la estación {}", id_station)
+        return retornar_error_general(
+            f"WeatherLink respondió sin datos para la estación {id_station}",
+            estado=WEATHERLINK_SIN_DATOS,
+        )
 
     except requests.exceptions.HTTPError as errHttp:
-        return retornar_error_general("error")
+        logger.warning("WeatherLink caído: respondió con HTTP error: {}", errHttp)
+        return retornar_error_general(f"HTTP error: {errHttp}", estado=WEATHERLINK_CAIDO)
     except requests.exceptions.ConnectionError as errCon:
-        return retornar_error_general("error")
+        logger.warning("WeatherLink caído: no disponible (ConnectionError): {}", errCon)
+        return retornar_error_general(f"ConnectionError: {errCon}", estado=WEATHERLINK_CAIDO)
     except requests.exceptions.Timeout as errTimeout:
-        return retornar_error_general("error")
+        logger.warning("WeatherLink caído: excedió timeout: {}", errTimeout)
+        return retornar_error_general(f"Timeout: {errTimeout}", estado=WEATHERLINK_CAIDO)
     except requests.exceptions.RequestException as err:
-        return retornar_error_general("error")
-    except json.JSONDecodeError:
-        return retornar_error_general("error")
+        logger.warning("WeatherLink caído: RequestException: {}", err)
+        return retornar_error_general(f"RequestException: {err}", estado=WEATHERLINK_CAIDO)
+    except json.JSONDecodeError as errJson:
+        logger.warning("WeatherLink respondió con JSON inválido: {}", errJson)
+        return retornar_error_general(f"JSON inválido: {errJson}", estado=WEATHERLINK_JSON_INVALIDO)
     except KeyError as errKey:
-        return retornar_error_general("error")
+        logger.warning("WeatherLink respondió sin la estructura esperada: {}", errKey)
+        return retornar_error_general(
+            f"Estructura inesperada en la respuesta: {errKey}",
+            estado=WEATHERLINK_SIN_DATOS,
+        )
     except Exception as e:
-        return retornar_error_general("error")
+        logger.exception("Error inesperado al consultar WeatherLink: {}", e)
+        return retornar_error_general(f"Error inesperado: {e}", estado=WEATHERLINK_CAIDO)
 
 
 def obtener_historico_aire(start_timestamp: int, end_timestamp: int) -> List[CalidadAireBase]:
@@ -140,8 +159,6 @@ def obtener_historico_aire(start_timestamp: int, end_timestamp: int) -> List[Cal
                     ts_lectura = punto_dato.get('ts')
                     hora_lectura = datetime.datetime.fromtimestamp(ts_lectura) if ts_lectura else None
 
-                    # print(f"punto dato con prettyjson: {json.dumps(punto_dato, indent=4)}")
-
                     datos_para_schema = {
                         'temp': punto_dato.get('temp_last'),
                         'humedad': punto_dato.get('hum_last'),
@@ -165,13 +182,13 @@ def obtener_historico_aire(start_timestamp: int, end_timestamp: int) -> List[Cal
                             hora_medicion=hora_lectura
                         )
                         registros_encontrados.append(registro)
-                    except Exception as e:
-                        print(f"Error parseando un registro histórico: {e}")
+                    except Exception:
+                        logger.exception("Error parseando un registro histórico de WeatherLink")
                         continue
         return registros_encontrados
 
-    except Exception as e:
-        print(f"Error obteniendo históricos WeatherLink: {e}")
+    except Exception:
+        logger.exception("Error obteniendo históricos WeatherLink")
         return []
 
 
@@ -180,7 +197,7 @@ if __name__ == "__main__":
 
     import datetime
 
-    print("--- PRUEBA DE HISTÓRICO DE AIRE MANUAL ---")
+    logger.info("--- PRUEBA DE HISTÓRICO DE AIRE MANUAL ---")
 
     fecha_inicio_str = "2025-11-19 04:50:00"
     fecha_fin_str = "2025-11-19 05:10:00"
@@ -194,23 +211,23 @@ if __name__ == "__main__":
         ts_start = int(dt_inicio.timestamp())
         ts_end = int(dt_fin.timestamp())
 
-        print(f"Consultando API WeatherLink...")
-        print(f"Desde: {dt_inicio} (TS: {ts_start})")
-        print(f"Hasta: {dt_fin} (TS: {ts_end})")
+        logger.info("Consultando API WeatherLink...")
+        logger.info("Desde: {} (TS: {})", dt_inicio, ts_start)
+        logger.info("Hasta: {} (TS: {})", dt_fin, ts_end)
 
         resultados = obtener_historico_aire(ts_start, ts_end)
 
-        print(f"\n--- RESULTADOS ({len(resultados)} registros) ---")
+        logger.info("--- RESULTADOS ({} registros) ---", len(resultados))
 
         if not resultados:
-            print("No se encontraron registros de calidad de aire en ese lapso.")
+            logger.warning("No se encontraron registros de calidad de aire en ese lapso.")
         else:
             # Ordenar por fecha ascendente
             resultados.sort(key=lambda x: x.hora_medicion if x.hora_medicion else datetime.datetime.min)
 
             # Imprimir tabla
-            print(f"{'HORA':<22} | {'PM1.0':<6} | {'PM2.5':<6} | {'PM10':<6} | {'TEMP':<6}")
-            print("-" * 65)
+            logger.info("{:<22} | {:<6} | {:<6} | {:<6} | {:<6}", 'HORA', 'PM1.0', 'PM2.5', 'PM10', 'TEMP')
+            logger.info("-" * 65)
 
             for r in resultados:
                 # Formateo seguro para evitar errores si algún dato es None
@@ -220,9 +237,9 @@ if __name__ == "__main__":
                 pm10 = f"{r.pm10:.1f}" if r.pm10 is not None else "-"
                 temp = f"{r.temp:.1f}" if r.temp is not None else "-"
 
-                print(f"{hora:<22} | {pm1:<6} | {pm25:<6} | {pm10:<6} | {temp}")
+                logger.info("{:<22} | {:<6} | {:<6} | {:<6} | {:<6}", hora, pm1, pm25, pm10, temp)
 
-    except ValueError as e:
-        print(f"Error en el formato de fecha: {e}")
-    except Exception as e:
-        print(f"Error inesperado: {e}")
+    except ValueError:
+        logger.exception("Error en el formato de fecha")
+    except Exception:
+        logger.exception("Error inesperado")

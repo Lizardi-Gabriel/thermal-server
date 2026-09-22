@@ -3,10 +3,11 @@ import json
 import subprocess
 import time
 from typing import Optional
+from loguru import logger
 
 
 def iniciar_servidor_ollama() -> bool:
-    print("iniciar el servidor de Ollama")
+    logger.info("Iniciando el servidor de Ollama")
 
     try:
         subprocess.Popen(
@@ -24,14 +25,14 @@ def iniciar_servidor_ollama() -> bool:
                 time.sleep(1)
                 intentos += 1
 
-        print("No se pudo iniciar Ollama")
+        logger.warning("No se pudo iniciar Ollama")
         return False
 
     except FileNotFoundError:
-        print("Error: No se encontró el comando 'ollama'")
+        logger.error("No se encontró el comando 'ollama'")
         return False
-    except Exception as e:
-        print(f"Error al intentar iniciar Ollama: {e}")
+    except Exception:
+        logger.exception("Error al intentar iniciar Ollama")
         return False
 
 
@@ -72,7 +73,7 @@ def obtener_descripcion_de_imagen(imagen_b64: str) -> Optional[str]:
     # Preparar entorno
     if not verificar_y_preparar_ollama(MODELO):
         tiempo_final = time.time() - tiempo_total
-        print(f"[ERROR] No se pudo preparar Ollama | Tiempo total: {tiempo_final:.2f}s")
+        logger.error("No se pudo preparar Ollama | Tiempo total: {:.2f}s", tiempo_final)
         return None
 
     # Limpieza del base64
@@ -108,6 +109,6 @@ def obtener_descripcion_de_imagen(imagen_b64: str) -> Optional[str]:
     # --- MENSAJE FINAL ---
     tiempo_final = time.time() - tiempo_total
     estado = "EXITO" if exito else "ERROR"
-    print(f"[{estado}] Tiempo total ejecución: {tiempo_final:.2f}s")
+    logger.info("[{}] Tiempo total ejecución: {:.2f}s", estado, tiempo_final)
 
     return descripcion if exito else None

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from loguru import logger
 
 from fastapi.responses import FileResponse
 from app.services.reportes_pdf import generar_reporte_pdf
@@ -92,8 +93,8 @@ def generar_reporte_pdf_endpoint(
                 "Content-Disposition": f"attachment; filename={filename}"
             }
         )
-    except Exception as e:
-        print(e)
+    except Exception:
+        logger.exception("Error al generar el reporte PDF")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al generar el reporte: {str(e)}"

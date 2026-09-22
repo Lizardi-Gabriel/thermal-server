@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, func, and_
 from typing import List, Optional, Type, Tuple
 from datetime import date
+from loguru import logger
+
 from app import models, schemas
 from app.models import LogSistema
 from app.services.security import hashear_password
@@ -33,10 +35,9 @@ def get_users(db: Session, skip: int = 0, limit: int = 100) -> List[models.Usuar
 
 def create_user(db: Session, user: schemas.UsuarioCreate) -> models.Usuario:
     """Crear un nuevo usuario con la contraseña hasheada."""
-    print('-----' *20)
-    print('password original: ' + user.password)
+    logger.debug("Creando nuevo usuario: {}", user.nombre_usuario)
     hashed_password = hashear_password(user.password)
-    print('password hashed: ' + hashed_password)
+    logger.debug("Contraseña hasheada generada para usuario: {}", user.nombre_usuario)
     db_user = models.Usuario(
         nombre_usuario=user.nombre_usuario,
         correo_electronico=user.correo_electronico,
@@ -394,52 +395,6 @@ def get_logs(db: Session, fecha_log: Optional[date] = None, tipo_log: Optional[m
         query = query.filter(models.LogSistema.tipo == tipo_log)
 
     return query.order_by(desc(models.LogSistema.hora_log)).all()
-
-
-# OPERACIONES CRUD PARA TokenFCM
-
-def create_token_fcm(db: Session, token: schemas.TokenFCMCreate) -> models.TokenFCM:
-    """Crear un nuevo token FCM para un usuario."""
-    db_token = models.TokenFCM(**token.model_dump())
-    db.add(db_token)
-    db.commit()
-    db.refresh(db_token)
-    return db_token
-
-
-def get_token_fcm_by_usuario(db: Session, usuario_id: int) -> List[models.TokenFCM]:
-    """Obtener todos los tokens FCM activos de un usuario."""
-    return db.query(models.TokenFCM).filter(
-        models.TokenFCM.usuario_id == usuario_id,
-        models.TokenFCM.activo == True
-    ).all()
-
-
-def get_token_fcm_existente(db: Session, usuario_id: int, token_fcm: str) -> Optional[models.TokenFCM]:
-    """Verificar si un token FCM ya existe para un usuario."""
-    return db.query(models.TokenFCM).filter(
-        models.TokenFCM.usuario_id == usuario_id,
-        models.TokenFCM.token_fcm == token_fcm
-    ).first()
-
-
-def desactivar_token_fcm(db: Session, token_id: int) -> bool:
-    """Desactivar un token FCM."""
-    db_token = db.query(models.TokenFCM).filter(models.TokenFCM.token_id == token_id).first()
-    if db_token:
-        db_token.activo = False
-        db.commit()
-        return True
-    return False
-
-
-def get_tokens_operadores_activos(db: Session) -> List[str]:
-    """Obtener tokens FCM de todos los operadores con sesion activa."""
-    tokens = db.query(models.TokenFCM.token_fcm).join(models.Usuario).filter(
-        models.Usuario.rol == models.RolUsuarioEnum.operador,
-        models.TokenFCM.activo == True
-    ).all()
-    return [token[0] for token in tokens]
 
 
 # OPERACIONES CRUD PARA GESTION DE USUARIOS (ADMIN)
