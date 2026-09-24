@@ -1,5 +1,6 @@
 import os
 import time
+from uuid import uuid4
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -87,21 +88,28 @@ app.mount(
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start = time.perf_counter()
+    request_id = uuid4().hex
+    with app_logger.contextualize(request_id=request_id):
+        try:
+            response = await call_next(request)
+        except Exception:
+            app_logger.exception(
+                "HTTP sin completar | método={} | ruta={} | duración={:.3f}s",
+                request.method, getattr(request.scope.get("route"), "path", "/ruta-no-identificada"), time.perf_counter() - start,
+            )
+            raise
 
-    response = await call_next(request)
-
-    process_time = time.perf_counter() - start
-
-    app_logger.info(
-        f"Tiempo de respuesta: {process_time:.4f} segundos "
-        f"| path={request.url.path}"
-    )
-
-    response.headers["X-Process-Time"] = (
-        f"{process_time:.4f} s"
-    )
-
-    return response
+        process_time = time.perf_counter() - start
+        level = "ERROR" if response.status_code >= 500 else (
+            "WARNING" if response.status_code >= 400 or process_time >= 2 else "DEBUG"
+        )
+        app_logger.log(
+            level, "HTTP | método={} | ruta={} | estado={} | duración={:.3f}s",
+            request.method, getattr(request.scope.get("route"), "path", "/ruta-no-identificada"), response.status_code, process_time,
+        )
+        response.headers["X-Process-Time"] = f"{process_time:.4f} s"
+        response.headers["X-Request-ID"] = request_id
+        return response
 
 
 # =========================

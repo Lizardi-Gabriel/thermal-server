@@ -78,7 +78,6 @@ async def subir_imagen_evento(
 ):
     """Sube una imagen para un evento y devuelve su URL pública local."""
     if not crud.get_evento_by_id(db, evento_id):
-        logger.warning("Intento de subir imagen para evento inexistente: {}", evento_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evento no encontrado.")
 
     allowed_types = {"image/jpeg", "image/png", "image/webp"}
@@ -137,7 +136,7 @@ async def subir_imagen_evento(
     public_url = f"/static/{relative_path.as_posix().replace('\\', '/')}"
     file_size = file_path.stat().st_size
 
-    logger.info(
+    logger.debug(
         "Imagen subida correctamente para evento_id={} | archivo={} | url={} | size={} bytes",
         evento_id,
         file_path.name,
@@ -184,16 +183,6 @@ def agregar_imagen_con_detecciones(evento_id: int, data: schemas.ImagenConDetecc
             )
             crud.create_calidad_aire(db, registro=calidad_aire_data)
 
-            crud.create_log(db, log=schemas.LogSistemaCreate(
-                tipo=models.TipoLogEnum.info,
-                mensaje=f"Se agrega imagen y detecciones, evento: {evento_id}, calidad de aire: {calidad_aire_data.model_dump_json(indent=4)}"
-            ))
-        else:
-            logger.warning(
-                "No se registra calidad del aire para evento_id={} porque WeatherLink reportó un estado fallido: {}",
-                evento_id,
-                descripcion,
-            )
 
     return crud.create_imagen_con_detecciones(db, evento_id=evento_id, imagen=data.imagen, detecciones=data.detecciones)
 
@@ -213,7 +202,6 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     Solicitar recuperacion de contraseña.
     Envia un correo con un enlace para restablecer la contraseña.
     """
-    logger.info("Solicitud de recuperación de contraseña para correo: {}", solicitud.correo_electronico)
 
     # Buscar usuario por correo
     usuario = crud.get_user_by_email(db, correo_electronico=solicitud.correo_electronico)
@@ -224,7 +212,6 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     }
 
     if not usuario:
-        logger.warning("Correo no encontrado para recuperación: {}", solicitud.correo_electronico)
         # Retornar mensaje generico sin revelar que el usuario no existe
         return mensaje_exito
 
@@ -234,7 +221,6 @@ async def solicitar_recuperacion_password( solicitud: schemas.SolicitudRecuperac
     # Guardar token en BD
     crud.crear_token_recuperacion(db, usuario.usuario_id, token, minutos_expiracion=30)
 
-    logger.info("Se generó token de recuperación para usuario: {} (email service deshabilitado)", usuario.nombre_usuario)
 
     # El servicio de correo fue removido; se registra el evento y se devuelve la respuesta genérica.
     crud.create_log(db, log=schemas.LogSistemaCreate(
@@ -306,7 +292,7 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
     Función que se ejecuta en segundo plano.
     Crea su propia sesión de BD, llama a Ollama y actualiza el evento.
     """
-    logger.info("Iniciando análisis IA para evento_id={}", evento_id)
+    logger.debug("Iniciando análisis IA para evento_id={}", evento_id)
 
     # Crear una nueva sesión de base de datos manual
     db_session = SessionLocal()
@@ -329,7 +315,6 @@ def procesar_y_guardar_descripcion(evento_id: int, imagen_b64: str):
             db_session.commit()
             logger.info("Evento actualizado con descripción de IA: {}", evento_id)
         else:
-            logger.warning("No se obtuvo descripción del LLM para evento_id={}", evento_id)
 
             crud.create_log(
                 db_session,
@@ -361,7 +346,7 @@ async def agregar_descripcion_ia(
     if not crud.get_evento_by_id(db, evento_id):
         raise HTTPException(status_code=404, detail="Evento no encontrado.")
 
-    logger.info("Solicitado análisis IA en segundo plano para evento_id={}", evento_id)
+    logger.debug("Solicitado análisis IA en segundo plano para evento_id={}", evento_id)
     # Agendar la tarea en segundo plano
     background_tasks.add_task(
         procesar_y_guardar_descripcion,

@@ -57,7 +57,8 @@ def verificar_y_preparar_ollama(modelo: str = "llava:7b") -> bool:
 
             if not any(modelo in m for m in modelos):
                 subprocess.run(["ollama", "pull", modelo])
-    except Exception:
+    except Exception as exc:
+        logger.warning("Ollama no pudo verificar el modelo | modelo={} | causa={}", modelo, type(exc).__name__)
         return False
 
     return True
@@ -73,7 +74,7 @@ def obtener_descripcion_de_imagen(imagen_b64: str) -> Optional[str]:
     # Preparar entorno
     if not verificar_y_preparar_ollama(MODELO):
         tiempo_final = time.time() - tiempo_total
-        logger.error("No se pudo preparar Ollama | Tiempo total: {:.2f}s", tiempo_final)
+        logger.debug("Preparación de Ollama fallida | duración={:.2f}s", tiempo_final)
         return None
 
     # Limpieza del base64
@@ -101,14 +102,18 @@ def obtener_descripcion_de_imagen(imagen_b64: str) -> Optional[str]:
 
         data = response.json()
         descripcion = data.get("response", "").strip()
-        exito = True
+        exito = bool(descripcion)
+        if not exito:
+            logger.warning("Generación IA sin descripción | modelo={}", MODELO)
 
-    except Exception:
+    except Exception as exc:
+        logger.warning("Generación IA fallida | modelo={} | causa={} | duración={:.2f}s",
+                       MODELO, type(exc).__name__, time.time() - tiempo_total)
         exito = False
 
     # --- MENSAJE FINAL ---
     tiempo_final = time.time() - tiempo_total
     estado = "EXITO" if exito else "ERROR"
-    logger.info("[{}] Tiempo total ejecución: {:.2f}s", estado, tiempo_final)
+    logger.debug("IA | resultado={} | duración={:.2f}s", estado, tiempo_final)
 
     return descripcion if exito else None

@@ -37,7 +37,6 @@ def create_user(db: Session, user: schemas.UsuarioCreate) -> models.Usuario:
     """Crear un nuevo usuario con la contraseña hasheada."""
     logger.debug("Creando nuevo usuario: {}", user.nombre_usuario)
     hashed_password = hashear_password(user.password)
-    logger.debug("Contraseña hasheada generada para usuario: {}", user.nombre_usuario)
     db_user = models.Usuario(
         nombre_usuario=user.nombre_usuario,
         correo_electronico=user.correo_electronico,
@@ -101,6 +100,8 @@ def create_evento(db: Session, evento: schemas.EventoCreate) -> models.Evento:
     db.add(db_evento)
     db.commit()
     db.refresh(db_evento)
+    logger.info("Evento creado | evento_id={} | fecha={} | estatus={}",
+                db_evento.evento_id, db_evento.fecha_evento, db_evento.estatus.value)
     return db_evento
 
 
@@ -108,12 +109,16 @@ def update_evento(db: Session, evento_id: int, evento_update: schemas.EventoUpda
     """Actualizar el estatus, usuario y descripción de un evento."""
     db_evento = get_evento_by_id(db, evento_id)
     if db_evento:
+        estatus_anterior = db_evento.estatus
         db_evento.estatus = evento_update.estatus
         db_evento.usuario_id = evento_update.usuario_id
         if evento_update.descripcion is not None:
             db_evento.descripcion = evento_update.descripcion
         db.commit()
         db.refresh(db_evento)
+        if estatus_anterior != db_evento.estatus:
+            logger.info("Estatus actualizado | evento_id={} | anterior={} | nuevo={} | usuario_id={}",
+                        evento_id, estatus_anterior.value, db_evento.estatus.value, db_evento.usuario_id)
     return db_evento
 
 

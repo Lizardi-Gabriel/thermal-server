@@ -86,39 +86,28 @@ def consumir_api_aire() -> CalidadAireBase:
                         }
 
                         schemaCalidadAire = CalidadAireBase(**datosParaSchema)
-                        logger.debug("Calidad del aire recibida: {}", schemaCalidadAire.model_dump_json(indent=4))
                         return schemaCalidadAire
 
-        logger.warning("WeatherLink respondió sin datos válidos para la estación {}", id_station)
         return retornar_error_general(
             f"WeatherLink respondió sin datos para la estación {id_station}",
             estado=WEATHERLINK_SIN_DATOS,
         )
 
-    except requests.exceptions.HTTPError as errHttp:
-        logger.warning("WeatherLink caído: respondió con HTTP error: {}", errHttp)
-        return retornar_error_general(f"HTTP error: {errHttp}", estado=WEATHERLINK_CAIDO)
-    except requests.exceptions.ConnectionError as errCon:
-        logger.warning("WeatherLink caído: no disponible (ConnectionError): {}", errCon)
-        return retornar_error_general(f"ConnectionError: {errCon}", estado=WEATHERLINK_CAIDO)
-    except requests.exceptions.Timeout as errTimeout:
-        logger.warning("WeatherLink caído: excedió timeout: {}", errTimeout)
-        return retornar_error_general(f"Timeout: {errTimeout}", estado=WEATHERLINK_CAIDO)
-    except requests.exceptions.RequestException as err:
-        logger.warning("WeatherLink caído: RequestException: {}", err)
-        return retornar_error_general(f"RequestException: {err}", estado=WEATHERLINK_CAIDO)
-    except json.JSONDecodeError as errJson:
-        logger.warning("WeatherLink respondió con JSON inválido: {}", errJson)
-        return retornar_error_general(f"JSON inválido: {errJson}", estado=WEATHERLINK_JSON_INVALIDO)
-    except KeyError as errKey:
-        logger.warning("WeatherLink respondió sin la estructura esperada: {}", errKey)
-        return retornar_error_general(
-            f"Estructura inesperada en la respuesta: {errKey}",
-            estado=WEATHERLINK_SIN_DATOS,
-        )
-    except Exception as e:
-        logger.exception("Error inesperado al consultar WeatherLink: {}", e)
-        return retornar_error_general(f"Error inesperado: {e}", estado=WEATHERLINK_CAIDO)
+    except requests.exceptions.JSONDecodeError:
+        return retornar_error_general("JSON inválido", estado=WEATHERLINK_JSON_INVALIDO)
+    except requests.exceptions.HTTPError as exc:
+        codigo = exc.response.status_code if exc.response is not None else "desconocido"
+        return retornar_error_general(f"HTTP {codigo}", estado=WEATHERLINK_CAIDO)
+    except requests.exceptions.Timeout:
+        return retornar_error_general("Tiempo de espera agotado", estado=WEATHERLINK_CAIDO)
+    except requests.exceptions.ConnectionError:
+        return retornar_error_general("No se pudo conectar", estado=WEATHERLINK_CAIDO)
+    except requests.exceptions.RequestException:
+        return retornar_error_general("Error de solicitud", estado=WEATHERLINK_CAIDO)
+    except KeyError as exc:
+        return retornar_error_general(f"Campo faltante: {exc}", estado=WEATHERLINK_SIN_DATOS)
+    except Exception as exc:
+        return retornar_error_general(f"Error procesando respuesta: {type(exc).__name__}", estado=WEATHERLINK_CAIDO)
 
 
 def obtener_historico_aire(start_timestamp: int, end_timestamp: int) -> List[CalidadAireBase]:
@@ -142,6 +131,7 @@ def obtener_historico_aire(start_timestamp: int, end_timestamp: int) -> List[Cal
     }
 
     registros_encontrados = []
+    registros_invalidos = 0
 
     try:
         respuesta = requests.get(urlApi, headers=headers, params=params, timeout=15)
@@ -183,12 +173,21 @@ def obtener_historico_aire(start_timestamp: int, end_timestamp: int) -> List[Cal
                         )
                         registros_encontrados.append(registro)
                     except Exception:
-                        logger.exception("Error parseando un registro histórico de WeatherLink")
+                        registros_invalidos += 1
                         continue
+        if registros_invalidos:
+            logger.warning(
+                "Histórico WeatherLink | desde_ts={} | hasta_ts={} | registros inválidos={} | válidos={}",
+                start_timestamp, end_timestamp, registros_invalidos, len(registros_encontrados),
+            )
         return registros_encontrados
 
-    except Exception:
-        logger.exception("Error obteniendo históricos WeatherLink")
+    except Exception as exc:
+        codigo = exc.response.status_code if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None else None
+        logger.warning(
+            "Histórico WeatherLink falló | desde_ts={} | hasta_ts={} | causa={} | http={}",
+            start_timestamp, end_timestamp, type(exc).__name__, codigo,
+        )
         return []
 
 
