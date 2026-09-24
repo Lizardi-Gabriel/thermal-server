@@ -85,14 +85,6 @@ VALUES (
         '$2b$12$alKQXNqjAyk2LEYdNsX.DevOQIbCO5hPGVAJmwstADFfKs6Cwtx2m',
         'operador'
     );
-    
-    
-    
-    
-    
-    
-    
-    
 --  consultas eventos
 select *
 from eventos;
@@ -131,10 +123,6 @@ ORDER BY e.fecha_evento DESC,
     e.evento_id DESC,
     i.imagen_id ASC,
     d.deteccion_id ASC;
-    
-    
-    
-    
 -- por evento
 SELECT e.*,
     i.*,
@@ -144,4 +132,21 @@ FROM eventos e
     LEFT JOIN imagenes i ON i.evento_id = e.evento_id
     LEFT JOIN detecciones d ON d.imagen_id = i.imagen_id
     LEFT JOIN calidad_aire ca ON ca.evento_id = e.evento_id
-WHERE e.evento_id = 2;
+WHERE e.evento_id = 9;
+INSERT INTO usuarios (
+        nombre_usuario,
+        correo_electronico,
+        hash_contrasena,
+        rol
+    )
+VALUES (
+        'adminweb',
+        'admin@web.com',
+        '$2b$12$alKQXNqjAyk2LEYdNsX.DevOQIbCO5hPGVAJmwstADFfKs6Cwtx2m',
+        'admin'
+    );
+SELECT usuario_id,
+    nombre_usuario,
+    rol
+FROM usuarios
+WHERE nombre_usuario = 'adminweb';

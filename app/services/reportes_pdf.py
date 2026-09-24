@@ -2,6 +2,7 @@ import io
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
+from time import perf_counter
 from typing import List, Optional
 from loguru import logger
 import pytz
@@ -243,6 +244,23 @@ def generar_reporte_pdf(
         output_path: str = "/tmp/reporte.pdf"
 ) -> str:
 
+    inicio_generacion = perf_counter()
+    log = logger.bind(reporte_pdf=output_path)
+    log.info(
+        "Generando PDF {} | desde={} | hasta={} | eventos={}",
+        output_path, fecha_inicio or "sin límite inferior",
+        fecha_fin or "sin límite superior", len(eventos),
+    )
+    dias_incluidos = sorted(
+        {ev['fecha_evento'] for ev in eventos if ev.get('fecha_evento')},
+        key=lambda fecha: datetime.strptime(fecha, "%d/%m/%Y"),
+    )
+    log.info(
+        "PDF | días en la tabla de eventos={} | desde={} | hasta={} | días=[{}]",
+        len(dias_incluidos), dias_incluidos[0] if dias_incluidos else "ninguno",
+        dias_incluidos[-1] if dias_incluidos else "ninguno", ", ".join(dias_incluidos),
+    )
+
     doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
     story = []
     styles = getSampleStyleSheet()
@@ -311,6 +329,11 @@ def generar_reporte_pdf(
 
     if eventos_por_dia_local:
         dias_ordenados = sorted(eventos_por_dia_local.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y"))
+        log.info(
+            "PDF | días para gráficas (solo eventos confirmados)={} | días=[{}] | "
+            "horas convertidas a America/Mexico_City conservando la fecha original del evento",
+            len(dias_ordenados), ", ".join(dias_ordenados),
+        )
 
         for fecha_str in dias_ordenados:
             eventos_del_dia = eventos_por_dia_local[fecha_str]
@@ -334,6 +357,13 @@ def generar_reporte_pdf(
 
             ts_start = int(start_buffer.timestamp())
             ts_end = int(end_buffer.timestamp())
+            log.info(
+                "PDF | día={} | eventos confirmados={} | consulta de aire con margen de 30 minutos | "
+                "desde México={} | hasta México={} | desde UTC={} | hasta UTC={} | timestamps={}..{}",
+                fecha_str, len(eventos_del_dia), start_buffer.isoformat(), end_buffer.isoformat(),
+                start_buffer.astimezone(UTC_TZ).isoformat(), end_buffer.astimezone(UTC_TZ).isoformat(),
+                ts_start, ts_end,
+            )
 
             # Consultar Histórico UNA VEZ por día
             registros_dia = obtener_historico_aire(ts_start, ts_end)
@@ -342,13 +372,21 @@ def generar_reporte_pdf(
             else:
                 registros_filtrados = []
 
+            log.info(
+                "PDF | día={} | registros de aire recibidos={} | usados (PM1 > 0)={} | descartados={}",
+                fecha_str, len(registros_dia or []), len(registros_filtrados),
+                len(registros_dia or []) - len(registros_filtrados),
+            )
+
             # Generar Gráfica pasando los registros
             graficaDiaPath = generar_grafica_diaria(fecha_str, eventos_del_dia, registros_filtrados, start_buffer, end_buffer)
 
             if graficaDiaPath and os.path.exists(graficaDiaPath):
+                log.info("PDF | día={} | gráfica generada", fecha_str)
                 imgDia = Image(graficaDiaPath, width=7*inch, height=3.5*inch)
                 story.append(imgDia)
             else:
+                log.warning("PDF | día={} | no se pudo generar la gráfica", fecha_str)
                 story.append(Paragraph("No se pudo generar la gráfica (sin datos históricos).", styles['Italic']))
 
             # CALCULAR MAXIMOS para cada evento usando los registros consultados
@@ -360,6 +398,7 @@ def generar_reporte_pdf(
 
             story.append(Spacer(1, 0.4*inch))
     else:
+        log.info("PDF | sin días con eventos confirmados; no se generarán gráficas diarias")
         story.append(Paragraph("No hay eventos confirmados para graficar en el periodo seleccionado.", normalStyle))
 
     story.append(PageBreak())
@@ -457,4 +496,8 @@ def generar_reporte_pdf(
         story.append(eventosTable)
 
     doc.build(story)
+    log.info(
+        "PDF generado | archivo={} | tamaño={} bytes | duración={:.2f} segundos",
+        output_path, os.path.getsize(output_path), perf_counter() - inicio_generacion,
+    )
     return output_path

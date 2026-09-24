@@ -39,6 +39,12 @@ def generar_reporte_pdf_endpoint(
     fecha_inicio_str = fecha_inicio.strftime("%Y-%m-%d") if fecha_inicio else None
     fecha_fin_str = fecha_fin.strftime("%Y-%m-%d") if fecha_fin else None
 
+    logger.info(
+        "Reporte PDF solicitado | desde={} | hasta={} | límite=500 eventos",
+        fecha_inicio_str or "sin límite inferior",
+        fecha_fin_str or "sin límite superior",
+    )
+
     estadisticas = crud.get_estadisticas_eventos(db, fecha_inicio, fecha_fin)
 
     # Obtener eventos con filtro de fechas
@@ -50,6 +56,12 @@ def generar_reporte_pdf_endpoint(
     )
 
     eventos_db, total = crud.get_eventos_optimizado(db, filtros)
+    logger.info("Reporte PDF | eventos encontrados={} | incluidos={}", total, len(eventos_db))
+    if total > len(eventos_db):
+        logger.warning(
+            "Reporte PDF parcial: se incluyen {} de {} eventos por el límite de la consulta",
+            len(eventos_db), total,
+        )
 
     # Convertir eventos a dict con campos calculados
     eventos_list = []
@@ -93,7 +105,7 @@ def generar_reporte_pdf_endpoint(
                 "Content-Disposition": f"attachment; filename={filename}"
             }
         )
-    except Exception:
+    except Exception as e:
         logger.exception("Error al generar el reporte PDF")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -180,6 +192,5 @@ def eliminar_usuario(
             detail="Usuario no encontrado"
         )
     return None
-
 
 
