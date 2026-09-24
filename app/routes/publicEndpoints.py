@@ -63,9 +63,15 @@ def crear_evento(evento: schemas.EventoCreate, db: Session = Depends(get_db)):
 # ENDPOINTS DE LOGS
 
 @router.get("/logs", response_model=list[schemas.LogSistema])
-def listar_logs(fecha: Optional[date] = Query(default=None), tipo: Optional[models.TipoLogEnum] = Query(default=None), db: Session = Depends(get_db)):
-    """ Obtiene una lista de logs del sistema con filtros opcionales por fecha y tipo. """
-    return crud.get_logs(db=db, fecha_log=fecha, tipo_log=tipo)
+def listar_logs(
+    fecha: Optional[date] = Query(default=None),
+    tipo: Optional[models.TipoLogEnum] = Query(default=None),
+    skip: int = Query(default=0, ge=0, description="Número de registros a omitir"),
+    limit: int = Query(default=50, ge=1, le=500, description="Máximo de registros a devolver"),
+    db: Session = Depends(get_db),
+):
+    """Lista logs del más reciente al más antiguo, con filtros y paginación skip/limit."""
+    return crud.get_logs(db=db, fecha_log=fecha, tipo_log=tipo, skip=skip, limit=limit)
 
 
 @router.post("/eventos/{evento_id}/imagenes/upload", status_code=status.HTTP_201_CREATED)
@@ -355,4 +361,3 @@ async def agregar_descripcion_ia(
     )
 
     return {"mensaje": "Imagen recibida. analisis desc en segundo plano."}
-

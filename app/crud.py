@@ -389,8 +389,14 @@ def create_log(db: Session, log: schemas.LogSistemaCreate) -> models.LogSistema:
     return db_log
 
 
-def get_logs(db: Session, fecha_log: Optional[date] = None, tipo_log: Optional[models.TipoLogEnum] = None) -> list[Type[LogSistema]]:
-    """Obtener una lista de logs del sistema con filtros opcionales por fecha y tipo."""
+def get_logs(
+    db: Session,
+    fecha_log: Optional[date] = None,
+    tipo_log: Optional[models.TipoLogEnum] = None,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[models.LogSistema]:
+    """Filtrar logs y paginar en la base de datos con un orden determinista."""
     query = db.query(models.LogSistema)
 
     if fecha_log:
@@ -399,7 +405,12 @@ def get_logs(db: Session, fecha_log: Optional[date] = None, tipo_log: Optional[m
     if tipo_log:
         query = query.filter(models.LogSistema.tipo == tipo_log)
 
-    return query.order_by(desc(models.LogSistema.hora_log)).all()
+    return (
+        query.order_by(desc(models.LogSistema.hora_log), desc(models.LogSistema.log_id))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 # OPERACIONES CRUD PARA GESTION DE USUARIOS (ADMIN)
@@ -570,7 +581,6 @@ def limpiar_tokens_expirados(db: Session) -> int:
 
     db.commit()
     return tokens_eliminados
-
 
 
 
