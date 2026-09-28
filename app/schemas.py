@@ -194,8 +194,8 @@ class EventosFiltros(BaseModel):
     usuario_id: Optional[int] = None
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
-    #skip: int = 0
-    #limit: int = 50
+    skip: int = 0
+    limit: int = 50
 
 
 class EstadisticasEventos(BaseModel):
@@ -317,4 +317,3 @@ class RestablecerPasswordResponse(BaseModel):
 
 class DescripcionImagenRequest(BaseModel):
     imagen_base64: str
-

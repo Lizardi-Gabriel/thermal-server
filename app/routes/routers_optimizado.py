@@ -34,8 +34,8 @@ def listar_eventos_optimizado(
         usuario_id: Optional[int] = Query(None),
         fecha_inicio: Optional[date] = Query(None),
         fecha_fin: Optional[date] = Query(None),
-        #skip: int = Query(0, ge=0),
-        #limit: int = Query(50, ge=1, le=2000),
+        skip: int = Query(0, ge=0, description="Número de eventos a omitir"),
+        limit: int = Query(50, ge=1, le=2000, description="Máximo de eventos a devolver"),
         db: Session = Depends(get_db)
 ):
     """
@@ -47,6 +47,8 @@ def listar_eventos_optimizado(
     - usuario_id: ID del usuario que gestiono el evento
     - fecha_inicio: Fecha inicio del rango
     - fecha_fin: Fecha fin del rango
+    - skip: Numero de eventos a omitir (por defecto 0)
+    - limit: Maximo de eventos a devolver (por defecto 50, maximo 2000)
     """
     logger.debug(
         "Consultando eventos optimizados | estatus={} | usuario_id={} | fecha_inicio={} | fecha_fin={}",
@@ -60,9 +62,9 @@ def listar_eventos_optimizado(
         estatus=estatus,
         usuario_id=usuario_id,
         fecha_inicio=fecha_inicio,
-        fecha_fin=fecha_fin
-        #skip=skip,
-        #limit=limit
+        fecha_fin=fecha_fin,
+        skip=skip,
+        limit=limit
     )
 
     eventos, total_count = crud.get_eventos_optimizado(db, filtros)

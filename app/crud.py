@@ -277,8 +277,14 @@ def get_eventos_optimizado(db: Session, filtros: schemas.EventosFiltros ) -> Tup
     # Contar total sin paginacion
     total_count = query.count()
 
-    # Ordenar por fecha descendente y aplicar paginacion
-    eventos = query.order_by(desc(models.Evento.fecha_evento)).all()
+    # Orden estable para evitar registros repetidos o saltados entre paginas
+    eventos = (
+        query
+        .order_by(desc(models.Evento.fecha_evento), desc(models.Evento.evento_id))
+        .offset(filtros.skip)
+        .limit(filtros.limit)
+        .all()
+    )
 
     return eventos, total_count
 
@@ -581,6 +587,5 @@ def limpiar_tokens_expirados(db: Session) -> int:
 
     db.commit()
     return tokens_eliminados
-
 
 
