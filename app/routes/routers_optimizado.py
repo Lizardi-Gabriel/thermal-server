@@ -28,7 +28,7 @@ def obtener_estadisticas_eventos(
     return schemas.EstadisticasEventos(**estadisticas)
 
 
-@router.get("/eventosfront/optimizado", response_model=List[schemas.EventoOptimizado])
+@router.get("/eventosfront/optimizado", response_model=schemas.EventosPaginados)
 def listar_eventos_optimizado(
         estatus: Optional[models.EstatusEventoEnum] = Query(None),
         usuario_id: Optional[int] = Query(None),
@@ -86,8 +86,19 @@ def listar_eventos_optimizado(
 
         eventos_optimizados.append(schemas.EventoOptimizado(**evento_dict))
 
-    logger.debug("Eventos optimizados obtenidos: {} registros", len(eventos_optimizados))
-    return eventos_optimizados
+    logger.debug(
+        "Eventos optimizados obtenidos: {} de {} registros | skip={} | limit={}",
+        len(eventos_optimizados),
+        total_count,
+        skip,
+        limit,
+    )
+    return schemas.EventosPaginados(
+        items=eventos_optimizados,
+        total=total_count,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get("/eventosfront/{evento_id}/optimizado", response_model=schemas.EventoDetalleOptimizado)

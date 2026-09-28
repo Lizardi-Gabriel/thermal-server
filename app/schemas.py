@@ -188,6 +188,14 @@ class EventoDetalleOptimizado(EventoOptimizado):
     registros_calidad_aire: List[CalidadAire] = []
 
 
+class EventosPaginados(BaseModel):
+    """Respuesta paginada para el listado optimizado de eventos."""
+    items: List[EventoOptimizado]
+    total: int
+    skip: int
+    limit: int
+
+
 class EventosFiltros(BaseModel):
     """Parametros de filtro para listar eventos."""
     estatus: Optional[EstatusEventoEnum] = None
